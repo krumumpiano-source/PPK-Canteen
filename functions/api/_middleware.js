@@ -1,4 +1,4 @@
-/* PPK-Canteen — API Middleware: JWT Auth + RBAC */
+﻿/* PPK-Canteen — API Middleware: JWT Auth + RBAC */
 
 const PUBLIC_PREFIXES = ['/api/auth/login', '/api/auth/set-password', '/api/biddings/public', '/api/menus/public', '/api/complaints/public'];
 
@@ -94,12 +94,12 @@ export async function verifyJWT(token, secret) {
   }
 }
 
-// ── Password Hashing (PBKDF2-SHA256, 310K iterations) ──
+// ── Password Hashing (PBKDF2-SHA256, 100K iterations — CF Workers max) ──
 export async function hashPassword(password, salt) {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt: enc.encode(salt), iterations: 310000, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: enc.encode(salt), iterations: 100000, hash: 'SHA-256' },
     keyMaterial, 256
   );
   return b64url(bits);
