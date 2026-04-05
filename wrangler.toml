@@ -1,4 +1,4 @@
-﻿name = "ppk-canteen"
+name = "ppk-canteen"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "frontend"
 
@@ -7,11 +7,5 @@ binding = "DB"
 database_name = "ppk-canteen-db"
 database_id = "7ec61ad1-3718-401d-9697-193e112b718b"
 
-# R2 removed — ไม่ต้องผูกบัตร
-# รูปภาพ/สลิปเก็บเป็น base64 ใน D1 แทน
-
 [ai]
 binding = "AI"
-
-# Secrets (ตั้งค่าผ่าน wrangler secret put):
-# JWT_SECRET — สำหรับ sign/verify JWT token
