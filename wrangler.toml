@@ -1,4 +1,4 @@
-name = "ppk-canteen"
+﻿name = "ppk-canteen"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "frontend"
 
@@ -7,9 +7,8 @@ binding = "DB"
 database_name = "ppk-canteen-db"
 database_id = "7ec61ad1-3718-401d-9697-193e112b718b"
 
-[[r2_buckets]]
-binding = "BUCKET"
-bucket_name = "ppk-canteen-files"
+# R2 removed — ไม่ต้องผูกบัตร
+# รูปภาพ/สลิปเก็บเป็น base64 ใน D1 แทน
 
 [ai]
 binding = "AI"

@@ -1,4 +1,4 @@
-/* PPK-Canteen — Billing API (Periods + Readings + Bills + Generate) */
+﻿/* PPK-Canteen — Billing API (Periods + Readings + Bills + Generate) */
 import { auditLog } from '../_middleware.js';
 
 export async function onRequest(context) {
@@ -112,12 +112,14 @@ async function createReading(DB, context, user) {
   if (contentType.includes('multipart/form-data')) {
     const fd = await context.request.formData();
     body = Object.fromEntries(fd.entries());
-    // Handle photo upload to R2
+    // Handle photo upload to D1 files table
     const photo = fd.get('photo');
     if (photo && photo.size > 0) {
-      const key = `meters/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-      await context.env.BUCKET.put(key, photo.stream(), { httpMetadata: { contentType: photo.type } });
-      body.photo_key = key;
+      const fileId = 'F-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
+      const buf = await photo.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      await DB.prepare("INSERT INTO files (id, data, content_type) VALUES (?, ?, ?)").bind(fileId, base64, photo.type || 'image/jpeg').run();
+      body.photo_key = fileId;
     }
   } else {
     body = await context.request.json();
@@ -148,9 +150,11 @@ async function updateReading(DB, context, id, user) {
     body = Object.fromEntries(fd.entries());
     const photo = fd.get('photo');
     if (photo && photo.size > 0) {
-      const key = `meters/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-      await context.env.BUCKET.put(key, photo.stream(), { httpMetadata: { contentType: photo.type } });
-      body.photo_key = key;
+      const fileId = 'F-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
+      const buf = await photo.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      await DB.prepare("INSERT INTO files (id, data, content_type) VALUES (?, ?, ?)").bind(fileId, base64, photo.type || 'image/jpeg').run();
+      body.photo_key = fileId;
     }
   } else {
     body = await context.request.json();

@@ -1,4 +1,4 @@
-/* PPK-Canteen — Payments API */
+﻿/* PPK-Canteen — Payments API */
 import { auditLog } from '../_middleware.js';
 
 export async function onRequest(context) {
@@ -48,9 +48,11 @@ async function createPayment(DB, context, user) {
     body = Object.fromEntries(fd.entries());
     const slip = fd.get('slip');
     if (slip && slip.size > 0) {
-      const key = `slips/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-      await context.env.BUCKET.put(key, slip.stream(), { httpMetadata: { contentType: slip.type } });
-      body.slip_photo_key = key;
+      const fileId = 'F-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
+      const buf = await slip.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      await DB.prepare("INSERT INTO files (id, data, content_type) VALUES (?, ?, ?)").bind(fileId, base64, slip.type || 'image/jpeg').run();
+      body.slip_photo_key = fileId;
     }
   } else {
     body = await context.request.json();

@@ -1,12 +1,12 @@
-/* PPK-Canteen — Upload / R2 File Serving / OCR API */
+﻿/* PPK-Canteen — Upload / File Serving (D1) / OCR API */
 
 export async function onRequest(context) {
   const path = context.params.path || [];
   const method = context.request.method;
-  const { BUCKET, AI } = context.env;
+  const { DB, AI } = context.env;
 
-  // Serve files: GET /api/upload/{type}/{id}
-  if (method === 'GET' && path.length === 2) return serveFile(BUCKET, path[0], path[1]);
+  // Serve files: GET /api/upload/{id}
+  if (method === 'GET' && path.length === 1) return serveFile(DB, path[0]);
 
   // OCR meter reading: POST /api/upload/ocr-meter
   if (method === 'POST' && path.length === 1 && path[0] === 'ocr-meter') return ocrMeter(AI, context.request);
@@ -14,26 +14,17 @@ export async function onRequest(context) {
   return Response.json({ error: 'Not found' }, { status: 404 });
 }
 
-async function serveFile(BUCKET, type, id) {
-  const allowedTypes = ['documents', 'meter-photos', 'slips'];
-  if (!allowedTypes.includes(type)) return Response.json({ error: 'Invalid type' }, { status: 400 });
+async function serveFile(DB, id) {
+  const row = await DB.prepare('SELECT data, content_type FROM files WHERE id = ?').bind(id).first();
+  if (!row) return Response.json({ error: 'File not found' }, { status: 404 });
 
-  // Try common extensions
-  const extensions = ['jpg', 'jpeg', 'png', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx'];
-  let obj = null;
-  for (const ext of extensions) {
-    obj = await BUCKET.get(`${type}/${id}.${ext}`);
-    if (obj) break;
-  }
-
-  // Also try exact key
-  if (!obj) obj = await BUCKET.get(`${type}/${id}`);
-  if (!obj) return Response.json({ error: 'File not found' }, { status: 404 });
-
-  const headers = new Headers();
-  if (obj.httpMetadata?.contentType) headers.set('Content-Type', obj.httpMetadata.contentType);
-  headers.set('Cache-Control', 'public, max-age=86400');
-  return new Response(obj.body, { headers });
+  const binary = Uint8Array.from(atob(row.data), c => c.charCodeAt(0));
+  return new Response(binary, {
+    headers: {
+      'Content-Type': row.content_type || 'image/jpeg',
+      'Cache-Control': 'public, max-age=86400'
+    }
+  });
 }
 
 async function ocrMeter(AI, request) {
