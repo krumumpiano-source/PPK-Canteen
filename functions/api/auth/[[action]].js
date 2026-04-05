@@ -1,4 +1,4 @@
-/* PPK-Canteen — Auth API
+﻿/* PPK-Canteen — Auth API
    POST /api/auth/login
    POST /api/auth/logout
    POST /api/auth/set-password  (first-time setup via token)
@@ -8,16 +8,20 @@
 import { signJWT, hashPassword, generateSalt, setTokenCookie, clearTokenCookie, auditLog } from '../_middleware.js';
 
 export async function onRequest(context) {
-  const action = (context.params.action || [])[0];
-  const method = context.request.method;
+  try {
+    const action = (context.params.action || [])[0];
+    const method = context.request.method;
 
-  if (action === 'login' && method === 'POST') return handleLogin(context);
-  if (action === 'logout' && method === 'POST') return handleLogout(context);
-  if (action === 'set-password' && method === 'POST') return handleSetPassword(context);
-  if (action === 'change-password' && method === 'POST') return handleChangePassword(context);
-  if (action === 'me' && method === 'GET') return handleMe(context);
+    if (action === 'login' && method === 'POST') return await handleLogin(context);
+    if (action === 'logout' && method === 'POST') return await handleLogout(context);
+    if (action === 'set-password' && method === 'POST') return await handleSetPassword(context);
+    if (action === 'change-password' && method === 'POST') return await handleChangePassword(context);
+    if (action === 'me' && method === 'GET') return await handleMe(context);
 
-  return Response.json({ error: 'Not found' }, { status: 404 });
+    return Response.json({ error: 'Not found' }, { status: 404 });
+  } catch (err) {
+    return Response.json({ error: err.message, stack: err.stack }, { status: 500 });
+  }
 }
 
 async function handleLogin(context) {
