@@ -1,0 +1,12 @@
+{
+  "name": "ppk-canteen",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ระบบจัดการโรงอาหาร โรงเรียนพะเยาพิทยาคม",
+  "scripts": {
+    "dev": "npx wrangler pages dev frontend --d1=DB --r2=BUCKET --ai=AI",
+    "deploy": "npx wrangler pages deploy frontend --project-name ppk-canteen",
+    "migrate": "npx wrangler d1 execute ppk-canteen-db --file=migrations/001_init.sql --remote",
+    "migrate:local": "npx wrangler d1 execute ppk-canteen-db --file=migrations/001_init.sql --local"
+  }
+}

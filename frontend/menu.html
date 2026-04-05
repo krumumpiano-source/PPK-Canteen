@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>เมนูอาหาร — โรงอาหารโรงเรียนพะเยาพิทยาคม</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+  body { background: #f3f4f6; }
+  .public-header { background: linear-gradient(135deg, #059669, #047857); color: #fff; padding: 2rem 1rem; text-align: center; }
+  .public-header h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+  .public-header p { opacity: 0.9; font-size: 0.9rem; }
+  .container { max-width: 900px; margin: 0 auto; padding: 1rem; }
+  .filter-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .filter-bar select { padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 8px; font-family: inherit; }
+  .menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+  .menu-card { background: #fff; border-radius: 12px; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .menu-card h4 { color: #1f2937; margin-bottom: 0.25rem; }
+  .menu-price { font-size: 1.2rem; color: #059669; font-weight: 700; }
+  .menu-stall { font-size: 0.8rem; color: #6b7280; margin-top: 0.25rem; }
+  .menu-cat { display: inline-block; background: #ecfdf5; color: #065f46; padding: 0.15rem 0.5rem; border-radius: 12px; font-size: 0.75rem; margin-top: 0.25rem; }
+  .empty { text-align: center; padding: 3rem; color: #9ca3af; }
+  .footer-link { text-align: center; margin-top: 2rem; }
+  .footer-link a { color: #059669; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="public-header">
+  <h1>เมนูอาหารวันนี้</h1>
+  <p>โรงอาหารโรงเรียนพะเยาพิทยาคม</p>
+</div>
+<div class="container">
+  <div class="filter-bar">
+    <select id="filter-cat" onchange="applyFilter()">
+      <option value="">ทุกประเภท</option>
+      <option value="rice">ข้าวราดแกง</option>
+      <option value="noodle">ก๋วยเตี๋ยว</option>
+      <option value="drink">เครื่องดื่ม</option>
+      <option value="dessert">ขนม/ของหวาน</option>
+      <option value="snack">ของว่าง</option>
+      <option value="other">อื่นๆ</option>
+    </select>
+  </div>
+  <div id="menu-grid" class="menu-grid"><div class="empty">กำลังโหลด...</div></div>
+  <div class="footer-link"><a href="/">เข้าสู่ระบบ</a></div>
+</div>
+
+<script>
+let allMenus = [];
+
+async function loadMenus() {
+  try {
+    const res = await fetch('/api/menus/public');
+    const json = await res.json();
+    allMenus = json.data || [];
+    applyFilter();
+  } catch (e) {
+    document.getElementById('menu-grid').innerHTML = '<div class="empty">ไม่สามารถโหลดข้อมูลได้</div>';
+  }
+}
+
+function applyFilter() {
+  const cat = document.getElementById('filter-cat').value;
+  let filtered = allMenus;
+  if (cat) filtered = filtered.filter(m => m.category === cat);
+
+  const el = document.getElementById('menu-grid');
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty">ไม่พบเมนูอาหาร</div>';
+    return;
+  }
+
+  const catNames = { rice: 'ข้าวราดแกง', noodle: 'ก๋วยเตี๋ยว', drink: 'เครื่องดื่ม', dessert: 'ขนม/ของหวาน', snack: 'ของว่าง', other: 'อื่นๆ' };
+
+  el.innerHTML = filtered.map(m => `
+    <div class="menu-card">
+      <h4>${esc(m.name)}</h4>
+      <div class="menu-price">${num(m.price)} บาท</div>
+      <span class="menu-cat">${catNames[m.category] || m.category}</span>
+      <div class="menu-stall">ร้าน: ${esc(m.stall_name || '-')}</div>
+    </div>
+  `).join('');
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function num(n) { return (n || 0).toLocaleString('th-TH'); }
+
+loadMenus();
+</script>
+</body>
+</html>

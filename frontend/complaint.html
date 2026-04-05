@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>แจ้งเรื่องร้องเรียน — โรงอาหารโรงเรียนพะเยาพิทยาคม</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+  body { background: #f3f4f6; }
+  .public-header { background: linear-gradient(135deg, #059669, #047857); color: #fff; padding: 2rem 1rem; text-align: center; }
+  .public-header h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+  .public-header p { opacity: 0.9; font-size: 0.9rem; }
+  .container { max-width: 600px; margin: 0 auto; padding: 1rem; }
+  .card { background: #fff; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem; }
+  .card h2 { color: #059669; font-size: 1.1rem; margin-bottom: 1rem; }
+  label { display: block; font-size: 0.85rem; margin-bottom: 0.25rem; color: #374151; font-weight: 500; }
+  input, select, textarea { width: 100%; padding: 0.6rem; border: 1px solid #d1d5db; border-radius: 8px; margin-bottom: 0.75rem; font-family: inherit; font-size: 0.9rem; }
+  textarea { min-height: 100px; resize: vertical; }
+  .btn { background: #059669; color: #fff; border: none; padding: 0.7rem 1.5rem; border-radius: 8px; cursor: pointer; font-size: 0.95rem; width: 100%; }
+  .btn:hover { background: #047857; }
+  .tabs { display: flex; gap: 0; margin-bottom: 1rem; }
+  .tab { flex: 1; padding: 0.7rem; text-align: center; cursor: pointer; border-bottom: 2px solid #e5e7eb; color: #6b7280; font-size: 0.9rem; }
+  .tab.active { border-color: #059669; color: #059669; font-weight: 600; }
+  .msg { padding: 0.75rem; border-radius: 8px; margin-top: 0.5rem; font-size: 0.9rem; }
+  .msg-ok { background: #dcfce7; color: #166534; }
+  .msg-err { background: #fee2e2; color: #991b1b; }
+  .track-result { margin-top: 1rem; }
+  .track-result .status { font-weight: 600; }
+  .track-result .response { background: #f0fdf4; padding: 0.75rem; border-radius: 8px; margin-top: 0.5rem; font-size: 0.9rem; }
+  .footer-link { text-align: center; margin-top: 2rem; }
+  .footer-link a { color: #059669; text-decoration: none; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="public-header">
+  <h1>แจ้งเรื่องร้องเรียน / ข้อเสนอแนะ</h1>
+  <p>โรงอาหารโรงเรียนพะเยาพิทยาคม</p>
+</div>
+<div class="container">
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('submit')">แจ้งเรื่อง</div>
+    <div class="tab" onclick="switchTab('track')">ติดตามสถานะ</div>
+  </div>
+
+  <!-- Submit Form -->
+  <div id="tab-submit" class="card">
+    <h2>แจ้งเรื่องร้องเรียน</h2>
+    <label>ประเภท *</label>
+    <select id="c-type">
+      <option value="hygiene">สุขอนามัย</option>
+      <option value="quality">คุณภาพอาหาร</option>
+      <option value="price">ราคา</option>
+      <option value="service">บริการ</option>
+      <option value="facility">สิ่งอำนวยความสะดวก</option>
+      <option value="other">อื่นๆ</option>
+    </select>
+    <label>หัวข้อ *</label>
+    <input id="c-title" placeholder="สรุปปัญหาสั้นๆ">
+    <label>รายละเอียด *</label>
+    <textarea id="c-desc" placeholder="อธิบายรายละเอียดของปัญหา"></textarea>
+    <label>ร้านค้าที่เกี่ยวข้อง (ถ้ามี)</label>
+    <input id="c-stall" placeholder="ชื่อร้านค้า">
+    <label>ชื่อผู้แจ้ง (ไม่ระบุตัวตนได้)</label>
+    <input id="c-name" placeholder="ไม่จำเป็นต้องกรอก">
+    <button class="btn" onclick="submitComplaint()">ส่งเรื่องร้องเรียน</button>
+    <div id="submit-msg"></div>
+  </div>
+
+  <!-- Track Form -->
+  <div id="tab-track" class="card hidden">
+    <h2>ติดตามสถานะเรื่องร้องเรียน</h2>
+    <label>รหัสติดตาม</label>
+    <input id="t-code" placeholder="กรอกรหัสที่ได้รับ เช่น CMP-ABC123">
+    <button class="btn" onclick="trackComplaint()">ตรวจสอบสถานะ</button>
+    <div id="track-msg"></div>
+    <div id="track-result" class="track-result hidden"></div>
+  </div>
+
+  <div class="footer-link"><a href="/">เข้าสู่ระบบ</a></div>
+</div>
+
+<script>
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (tab === 'submit' ? i === 0 : i === 1)));
+  document.getElementById('tab-submit').classList.toggle('hidden', tab !== 'submit');
+  document.getElementById('tab-track').classList.toggle('hidden', tab !== 'track');
+}
+
+async function submitComplaint() {
+  const title = document.getElementById('c-title').value.trim();
+  const description = document.getElementById('c-desc').value.trim();
+  const type = document.getElementById('c-type').value;
+  const stall = document.getElementById('c-stall').value.trim();
+  const name = document.getElementById('c-name').value.trim();
+  const msgEl = document.getElementById('submit-msg');
+
+  if (!title || !description) {
+    msgEl.innerHTML = '<div class="msg msg-err">กรุณากรอกหัวข้อและรายละเอียด</div>';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/complaints/public/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, description, complaint_type: type, stall_name: stall, complainant_name: name })
+    });
+    const json = await res.json();
+    if (res.ok) {
+      msgEl.innerHTML = `<div class="msg msg-ok">ส่งเรื่องสำเร็จ!<br>รหัสติดตาม: <strong>${esc(json.data.tracking_code)}</strong><br>กรุณาบันทึกรหัสนี้ไว้เพื่อติดตามสถานะ</div>`;
+      document.getElementById('c-title').value = '';
+      document.getElementById('c-desc').value = '';
+      document.getElementById('c-stall').value = '';
+      document.getElementById('c-name').value = '';
+    } else {
+      msgEl.innerHTML = `<div class="msg msg-err">${esc(json.error || 'เกิดข้อผิดพลาด')}</div>`;
+    }
+  } catch (e) {
+    msgEl.innerHTML = '<div class="msg msg-err">ไม่สามารถส่งข้อมูลได้</div>';
+  }
+}
+
+async function trackComplaint() {
+  const code = document.getElementById('t-code').value.trim();
+  const msgEl = document.getElementById('track-msg');
+  const resultEl = document.getElementById('track-result');
+
+  if (!code) { msgEl.innerHTML = '<div class="msg msg-err">กรุณากรอกรหัสติดตาม</div>'; return; }
+
+  try {
+    const res = await fetch('/api/complaints/public/track?code=' + encodeURIComponent(code));
+    const json = await res.json();
+
+    if (!res.ok || !json.data) {
+      msgEl.innerHTML = '<div class="msg msg-err">ไม่พบข้อมูล กรุณาตรวจสอบรหัสอีกครั้ง</div>';
+      resultEl.classList.add('hidden');
+      return;
+    }
+
+    const c = json.data;
+    const statusMap = { pending: 'รอดำเนินการ', in_progress: 'กำลังดำเนินการ', resolved: 'แก้ไขแล้ว', dismissed: 'ยกเลิก' };
+    const statusColor = { pending: '#f59e0b', in_progress: '#3b82f6', resolved: '#10b981', dismissed: '#ef4444' };
+
+    msgEl.innerHTML = '';
+    resultEl.classList.remove('hidden');
+    resultEl.innerHTML = `
+      <p><strong>หัวข้อ:</strong> ${esc(c.title)}</p>
+      <p><strong>สถานะ:</strong> <span class="status" style="color:${statusColor[c.status] || '#6b7280'}">${statusMap[c.status] || c.status}</span></p>
+      <p><strong>วันที่แจ้ง:</strong> ${fmtDate(c.created_at)}</p>
+      ${c.admin_response ? `<div class="response"><strong>การตอบกลับ:</strong><br>${esc(c.admin_response)}</div>` : ''}
+    `;
+  } catch (e) {
+    msgEl.innerHTML = '<div class="msg msg-err">ไม่สามารถโหลดข้อมูลได้</div>';
+  }
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function fmtDate(d) { if (!d) return '-'; return new Date(d).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }); }
+</script>
+</body>
+</html>

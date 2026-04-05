@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>เข้าสู่ระบบ — โรงอาหาร PPK</title>
+<link rel="stylesheet" href="/common.css">
+<link rel="manifest" href="/manifest.json">
+<style>
+body { background: linear-gradient(135deg, #059669 0%, #047857 50%, #065f46 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.login-card { background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.2); width: 100%; max-width: 420px; overflow: hidden; }
+.login-header { background: linear-gradient(135deg, #059669, #047857); color: #fff; padding: 2rem; text-align: center; }
+.login-header h1 { margin: 0; font-size: 1.5rem; }
+.login-header .logo { font-size: 3rem; margin-bottom: 0.5rem; }
+.login-header p { margin: 0.5rem 0 0; opacity: 0.9; font-size: 0.9rem; }
+.login-body { padding: 2rem; }
+.login-body .form-group { margin-bottom: 1.25rem; }
+.login-body label { display: block; font-weight: 600; margin-bottom: 0.4rem; color: #374151; font-size: 0.9rem; }
+.login-body input { width: 100%; padding: 0.75rem 1rem; border: 1.5px solid #D1D5DB; border-radius: 8px; font-size: 1rem; transition: border-color .2s; box-sizing: border-box; }
+.login-body input:focus { outline: none; border-color: #059669; box-shadow: 0 0 0 3px rgba(5,150,105,.15); }
+.login-body .btn { width: 100%; padding: 0.85rem; font-size: 1rem; font-weight: 700; border-radius: 8px; }
+.login-footer { text-align: center; padding: 0 2rem 1.5rem; }
+.login-footer a { color: #059669; font-size: 0.85rem; text-decoration: none; }
+.consent-row { display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 1.25rem; }
+.consent-row input[type=checkbox] { margin-top: 3px; width: auto; }
+.consent-row label { font-weight: 400; font-size: 0.85rem; color: #6B7280; cursor: pointer; }
+#setup-form { display: none; }
+.alert { padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; }
+.alert-error { background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; }
+.alert-success { background: #D1FAE5; color: #065F46; border: 1px solid #A7F3D0; }
+</style>
+</head>
+<body>
+<div class="login-card">
+  <div class="login-header">
+    <div class="logo">🍽️</div>
+    <h1>ระบบจัดการโรงอาหาร</h1>
+    <p>โรงเรียนพะเยาพิทยาคม</p>
+  </div>
+
+  <div class="login-body">
+    <div id="message"></div>
+
+    <!-- Login Form -->
+    <form id="login-form" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label for="phone">เบอร์โทรศัพท์</label>
+        <input type="tel" id="phone" name="phone" placeholder="0812345678" maxlength="10" required autocomplete="tel">
+      </div>
+      <div class="form-group">
+        <label for="password">รหัสผ่าน</label>
+        <input type="password" id="password" name="password" placeholder="••••••••" required autocomplete="current-password">
+      </div>
+      <div class="consent-row">
+        <input type="checkbox" id="consent" required>
+        <label for="consent">ข้าพเจ้ายินยอมให้ระบบจัดเก็บและใช้ข้อมูลส่วนบุคคลเพื่อการจัดการโรงอาหาร ตาม <a href="/privacy.html" target="_blank">นโยบายความเป็นส่วนตัว</a></label>
+      </div>
+      <button type="submit" class="btn btn-primary" id="login-btn">เข้าสู่ระบบ</button>
+    </form>
+
+    <!-- First-time Setup Form -->
+    <form id="setup-form" onsubmit="handleSetPassword(event)">
+      <div class="alert alert-success">ตั้งรหัสผ่านครั้งแรก — กรอกเบอร์โทร, Token ที่ได้รับ และรหัสผ่านใหม่</div>
+      <div class="form-group">
+        <label for="setup-phone">เบอร์โทรศัพท์</label>
+        <input type="tel" id="setup-phone" name="phone" placeholder="0812345678" maxlength="10" required>
+      </div>
+      <div class="form-group">
+        <label for="setup-token">Token (จากผู้ดูแลระบบ)</label>
+        <input type="text" id="setup-token" name="setup_token" required>
+      </div>
+      <div class="form-group">
+        <label for="setup-password">ตั้งรหัสผ่าน (อย่างน้อย 8 ตัว)</label>
+        <input type="password" id="setup-password" name="password" minlength="8" required autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label for="setup-confirm">ยืนยันรหัสผ่าน</label>
+        <input type="password" id="setup-confirm" minlength="8" required autocomplete="new-password">
+      </div>
+      <button type="submit" class="btn btn-primary" id="setup-btn">ตั้งรหัสผ่าน</button>
+      <button type="button" class="btn btn-secondary" onclick="showLoginForm()" style="margin-top:0.5rem;width:100%">กลับหน้าเข้าสู่ระบบ</button>
+    </form>
+  </div>
+
+  <div class="login-footer">
+    <a href="#" onclick="showSetupForm(); return false;">ตั้งรหัสผ่านครั้งแรก</a>
+  </div>
+</div>
+
+<script>
+function showMessage(text, type) {
+  document.getElementById('message').innerHTML = `<div class="alert alert-${type}">${text}</div>`;
+}
+
+function showLoginForm() {
+  document.getElementById('login-form').style.display = '';
+  document.getElementById('setup-form').style.display = 'none';
+}
+
+function showSetupForm() {
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('setup-form').style.display = '';
+  document.getElementById('message').innerHTML = '';
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ...';
+
+  const phone = document.getElementById('phone').value.trim();
+  const password = document.getElementById('password').value;
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ phone, password })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (data.needSetup) {
+        showSetupForm();
+        document.getElementById('setup-phone').value = phone;
+        showMessage('กรุณาตั้งรหัสผ่านก่อนเข้าใช้งาน', 'success');
+      } else {
+        showMessage(data.error || 'เข้าสู่ระบบไม่สำเร็จ', 'error');
+      }
+      btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+      return;
+    }
+
+    // Save user info locally for quick access
+    localStorage.setItem('currentUser', JSON.stringify(data.data));
+    window.location.href = '/app.html';
+  } catch (err) {
+    showMessage('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+    btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+  }
+}
+
+async function handleSetPassword(e) {
+  e.preventDefault();
+  const btn = document.getElementById('setup-btn');
+  const pw = document.getElementById('setup-password').value;
+  const confirm = document.getElementById('setup-confirm').value;
+
+  if (pw !== confirm) { showMessage('รหัสผ่านไม่ตรงกัน', 'error'); return; }
+  if (pw.length < 8) { showMessage('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร', 'error'); return; }
+
+  btn.disabled = true; btn.textContent = 'กำลังตั้งรหัสผ่าน...';
+
+  try {
+    const res = await fetch('/api/auth/set-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        phone: document.getElementById('setup-phone').value.trim(),
+        setup_token: document.getElementById('setup-token').value.trim(),
+        password: pw
+      })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showMessage(data.error || 'ตั้งรหัสผ่านไม่สำเร็จ', 'error');
+      btn.disabled = false; btn.textContent = 'ตั้งรหัสผ่าน';
+      return;
+    }
+
+    localStorage.setItem('currentUser', JSON.stringify(data.data));
+    window.location.href = '/app.html';
+  } catch (err) {
+    showMessage('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้', 'error');
+    btn.disabled = false; btn.textContent = 'ตั้งรหัสผ่าน';
+  }
+}
+
+// If already logged in, redirect
+(async function() {
+  try {
+    const res = await fetch('/api/auth/me', { credentials: 'include' });
+    if (res.ok) window.location.href = '/app.html';
+  } catch {}
+})();
+</script>
+</body>
+</html>

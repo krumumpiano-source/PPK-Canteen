@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>โรงอาหาร PPK — ระบบจัดการ</title>
+<link rel="stylesheet" href="/common.css">
+<link rel="manifest" href="/manifest.json">
+</head>
+<body>
+<div id="app"></div>
+<main class="main-content" id="content">
+  <div class="loading">กำลังโหลด...</div>
+</main>
+
+<script src="/common.js"></script>
+<script src="/navbar.js"></script>
+<script src="/app.js"></script>
+<script>
+(async function init() {
+  const user = await checkAuth();
+  if (!user) return;
+
+  // Render sidebar + topbar
+  document.getElementById('app').innerHTML = renderNavbar(user);
+
+  // Start router
+  window.addEventListener('hashchange', handleRoute);
+  handleRoute();
+})();
+
+function handleRoute() {
+  const hash = location.hash.slice(2) || 'dashboard';
+  const parts = hash.split('/');
+  const page = parts[0];
+  const params = parts.slice(1);
+
+  updateActiveNav();
+
+  const pageDef = APP_PAGES[page];
+  if (!pageDef) {
+    document.getElementById('content').innerHTML = `<div class="card" style="text-align:center;padding:3rem"><h2>404 — ไม่พบหน้านี้</h2><p><a href="#/dashboard">กลับแดชบอร์ด</a></p></div>`;
+    return;
+  }
+
+  const user = getCurrentUser();
+  if (pageDef.roles && !pageDef.roles.includes(user.role)) {
+    document.getElementById('content').innerHTML = `<div class="card" style="text-align:center;padding:3rem"><h2>403 — ไม่มีสิทธิ์เข้าถึง</h2><p><a href="#/dashboard">กลับแดชบอร์ด</a></p></div>`;
+    return;
+  }
+
+  document.getElementById('content').innerHTML = '<div class="loading">กำลังโหลด...</div>';
+
+  try {
+    pageDef.render(params);
+  } catch (err) {
+    console.error('Page render error:', err);
+    document.getElementById('content').innerHTML = `<div class="card" style="text-align:center;padding:3rem"><h2>เกิดข้อผิดพลาด</h2><p>${escapeHtml(err.message)}</p></div>`;
+  }
+}
+</script>
+</body>
+</html>
