@@ -5,7 +5,7 @@ pages_build_output_dir = "frontend"
 [[d1_databases]]
 binding = "DB"
 database_name = "ppk-canteen-db"
-database_id = "" # ← ใส่หลังสร้าง D1 บน Dashboard
+database_id = "7ec61ad1-3718-401d-9697-193e112b718b"
 
 [[r2_buckets]]
 binding = "BUCKET"
