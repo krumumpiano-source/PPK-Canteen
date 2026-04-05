@@ -1,4 +1,4 @@
--- =============================================
+﻿-- =============================================
 -- PPK-Canteen Database Schema v1.0
 -- ระบบจัดการโรงอาหาร โรงเรียนพะเยาพิทยาคม
 -- Cloudflare D1 (SQLite)
@@ -353,7 +353,7 @@ CREATE INDEX IF NOT EXISTS idx_notif_read ON notifications(user_id, is_read);
 -- Admin user (password: admin1234 — ต้องเปลี่ยนทันทีหลัง deploy)
 -- hash/salt จะถูกสร้างตอน first login ผ่าน setup_token
 INSERT OR IGNORE INTO users (id, phone, name, role, is_active, setup_token)
-VALUES ('USR-001', '0000000000', 'ผู้ดูแลระบบ', 'admin', 1, 'SETUP-ADMIN-001');
+VALUES ('USR-001', '0999999999', 'ผู้ดูแลระบบ', 'admin', 1, 'ADMIN-FIRST-LOGIN-2568');
 
 -- Default settings
 INSERT OR IGNORE INTO settings (key, value) VALUES
