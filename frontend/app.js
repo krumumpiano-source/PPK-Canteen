@@ -1,4 +1,4 @@
-/* =============================================
+﻿/* =============================================
    PPK-Canteen — app.js
    SPA Router + All Page Modules
    ============================================= */
@@ -26,6 +26,7 @@ const APP_PAGES = {
   'activity-log':     { render: pgActivityLog, roles: ['admin'] },
   'settings':         { render: pgSettings, roles: ['admin'] },
   'notifications':    { render: pgNotifications, roles: null },
+  'profile':          { render: pgProfile, roles: null },
   // Stall Owner pages
   'my-bills':         { render: pgMyBills, roles: ['stall_owner'] },
   'my-payments':      { render: pgMyPayments, roles: ['stall_owner'] },
@@ -1246,6 +1247,35 @@ window.changePassword = async function(e) {
   toast('เปลี่ยนรหัสผ่านสำเร็จ', 'success');
   e.target.reset();
 };
+
+// ═══════════════════════════════════════════════
+// PROFILE (โปรไฟล์)
+// ═══════════════════════════════════════════════
+async function pgProfile() {
+  const el = document.getElementById('content');
+  const res = await callAPI('GET', '/auth/me');
+  if (res.error) { el.innerHTML = '<p class="text-center">ไม่สามารถโหลดข้อมูลได้</p>'; return; }
+  const u = res.data;
+  el.innerHTML = `
+    <div class="page-header"><h1>👤 โปรไฟล์</h1></div>
+    <div class="card" style="padding:1.5rem;max-width:600px">
+      <h3 style="margin:0 0 1rem">ข้อมูลส่วนตัว</h3>
+      <div class="form-group"><label>ชื่อ</label><div style="padding:0.5rem 0;font-size:1.05rem">${escapeHtml(u.name)}</div></div>
+      <div class="form-group"><label>เบอร์โทร</label><div style="padding:0.5rem 0;font-size:1.05rem">${escapeHtml(u.phone)}</div></div>
+      <div class="form-group"><label>อีเมล</label><div style="padding:0.5rem 0;font-size:1.05rem">${u.email ? escapeHtml(u.email) : '<span style="color:#9CA3AF">ยังไม่ได้ตั้ง</span>'}</div></div>
+      <div class="form-group"><label>บทบาท</label><div style="padding:0.5rem 0"><span class="badge badge-primary">${ROLE_NAMES[u.role] || u.role}</span></div></div>
+      ${u.stall_id ? `<div class="form-group"><label>ร้านค้า</label><div style="padding:0.5rem 0">${escapeHtml(u.stall_id)}</div></div>` : ''}
+    </div>
+    <div class="card" style="padding:1.5rem;max-width:600px;margin-top:1rem">
+      <h3 style="margin:0 0 1rem">🔑 เปลี่ยนรหัสผ่าน</h3>
+      <form onsubmit="changePassword(event)">
+        <div class="form-group"><label>รหัสผ่านปัจจุบัน</label><input type="password" name="current_password" required autocomplete="current-password"></div>
+        <div class="form-group"><label>รหัสผ่านใหม่ (อย่างน้อย 8 ตัว)</label><input type="password" name="new_password" minlength="8" required autocomplete="new-password"></div>
+        <div class="form-group"><label>ยืนยันรหัสผ่านใหม่</label><input type="password" name="confirm_password" minlength="8" required autocomplete="new-password"></div>
+        <button type="submit" class="btn btn-primary">💾 เปลี่ยนรหัสผ่าน</button>
+      </form>
+    </div>`;
+}
 
 // ═══════════════════════════════════════════════
 // NOTIFICATIONS (การแจ้งเตือน)

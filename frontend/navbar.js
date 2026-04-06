@@ -1,4 +1,4 @@
-/* =============================================
+﻿/* =============================================
    PPK-Canteen — Navbar (Sidebar + Topbar)
    Dynamic menu based on user role
    ============================================= */
@@ -114,9 +114,10 @@ function getMenusForRole(role) {
     m.push({ path: 'my-inspections', label: 'ผลตรวจ', icon: '🔍' });
   }
 
-  // Notifications — ทุก role
+  // Notifications + Profile — ทุก role
   m.push({ section: '' });
   m.push({ path: 'notifications', label: 'การแจ้งเตือน', icon: '🔔' });
+  m.push({ path: 'profile', label: 'โปรไฟล์', icon: '👤' });
 
   return m;
 }
