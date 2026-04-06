@@ -1258,24 +1258,24 @@ async function pgProfile() {
   const u = res.data;
   el.innerHTML = `
     <div class="page-header"><h1>👤 โปรไฟล์</h1></div>
-    <div class="card" style="padding:1.5rem;max-width:600px">
-      <h3 style="margin:0 0 1rem">ข้อมูลส่วนตัว</h3>
+    <div class="card" style="max-width:600px">
+      <div class="card-header"><h3 class="card-title">ข้อมูลส่วนตัว</h3></div>
       <form onsubmit="saveProfile(event)">
-        <div class="form-group"><label>ชื่อ</label><input type="text" name="name" value="${escapeHtml(u.name)}" required></div>
-        <div class="form-group"><label>เบอร์โทร</label><input type="tel" name="phone" value="${escapeHtml(u.phone)}" maxlength="10" required></div>
-        <div class="form-group"><label>อีเมล</label><input type="email" name="email" value="${u.email ? escapeHtml(u.email) : ''}" placeholder="example@email.com"></div>
-        <div class="form-group"><label>บทบาท</label><div style="padding:0.5rem 0"><span class="badge badge-primary">${ROLE_NAMES[u.role] || u.role}</span></div></div>
-        ${u.stall_id ? `<div class="form-group"><label>ร้านค้า</label><div style="padding:0.5rem 0">${escapeHtml(u.stall_id)}</div></div>` : ''}
-        <button type="submit" class="btn btn-primary">💾 บันทึกข้อมูล</button>
+        <div class="form-group"><label class="form-label">ชื่อ</label><input class="form-input" type="text" name="name" value="${escapeHtml(u.name)}" required></div>
+        <div class="form-group"><label class="form-label">เบอร์โทร</label><input class="form-input" type="tel" name="phone" value="${escapeHtml(u.phone)}" maxlength="10" required></div>
+        <div class="form-group"><label class="form-label">อีเมล</label><input class="form-input" type="email" name="email" value="${u.email ? escapeHtml(u.email) : ''}" placeholder="example@email.com"></div>
+        <div class="form-group"><label class="form-label">บทบาท</label><div style="padding:0.5rem 0"><span class="badge badge-primary">${ROLE_NAMES[u.role] || u.role}</span></div></div>
+        ${u.stall_id ? `<div class="form-group"><label class="form-label">ร้านค้า</label><div style="padding:0.5rem 0">${escapeHtml(u.stall_id)}</div></div>` : ''}
+        <div class="form-actions" style="justify-content:flex-start"><button type="submit" class="btn btn-primary">💾 บันทึกข้อมูล</button></div>
       </form>
     </div>
-    <div class="card" style="padding:1.5rem;max-width:600px;margin-top:1rem">
-      <h3 style="margin:0 0 1rem">🔑 เปลี่ยนรหัสผ่าน</h3>
+    <div class="card" style="max-width:600px">
+      <div class="card-header"><h3 class="card-title">🔑 เปลี่ยนรหัสผ่าน</h3></div>
       <form onsubmit="changePassword(event)">
-        <div class="form-group"><label>รหัสผ่านปัจจุบัน</label><input type="password" name="current_password" required autocomplete="current-password"></div>
-        <div class="form-group"><label>รหัสผ่านใหม่ (อย่างน้อย 8 ตัว)</label><input type="password" name="new_password" minlength="8" required autocomplete="new-password"></div>
-        <div class="form-group"><label>ยืนยันรหัสผ่านใหม่</label><input type="password" name="confirm_password" minlength="8" required autocomplete="new-password"></div>
-        <button type="submit" class="btn btn-primary">💾 เปลี่ยนรหัสผ่าน</button>
+        <div class="form-group"><label class="form-label">รหัสผ่านปัจจุบัน</label><input class="form-input" type="password" name="current_password" required autocomplete="current-password"></div>
+        <div class="form-group"><label class="form-label">รหัสผ่านใหม่ (อย่างน้อย 8 ตัว)</label><input class="form-input" type="password" name="new_password" minlength="8" required autocomplete="new-password"></div>
+        <div class="form-group"><label class="form-label">ยืนยันรหัสผ่านใหม่</label><input class="form-input" type="password" name="confirm_password" minlength="8" required autocomplete="new-password"></div>
+        <div class="form-actions" style="justify-content:flex-start"><button type="submit" class="btn btn-primary">💾 เปลี่ยนรหัสผ่าน</button></div>
       </form>
     </div>`;
 }
