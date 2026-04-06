@@ -16,7 +16,7 @@ function renderNavbar(user) {
       </div>
       <nav class="sidebar-nav">
         ${menus.map(item => {
-          if (item.section) return `<div class="sidebar-section">${item.section}</div>`;
+          if ('section' in item) return item.section ? `<div class="sidebar-section">${item.section}</div>` : '<div style="margin:0.5rem 0"></div>';
           return `<a href="#/${item.path}" data-page="${item.path}" onclick="closeSidebar()">${item.icon} ${item.label}</a>`;
         }).join('')}
       </nav>
