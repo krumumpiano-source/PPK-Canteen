@@ -3,50 +3,49 @@
 const PUBLIC_PREFIXES = ['/api/auth/login', '/api/auth/set-password', '/api/biddings/public', '/api/menus/public', '/api/complaints/public'];
 
 export async function onRequest(context) {
-  const { pathname } = new URL(context.request.url);
-  const jwtSecret = context.env.JWT_SECRET;
+  try {
+    const { pathname } = new URL(context.request.url);
 
-  // CORS for same-origin (Pages Functions are same origin, but just in case)
-  if (context.request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders() });
-  }
+    // CORS for same-origin (Pages Functions are same origin, but just in case)
+    if (context.request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders() });
+    }
 
-  // Public endpoints — no auth required
-  if (PUBLIC_PREFIXES.some(p => pathname.startsWith(p))) {
+    // Public endpoints — no auth required
+    if (PUBLIC_PREFIXES.some(p => pathname.startsWith(p))) {
+      return addCors(await context.next());
+    }
+
+    // Get JWT from httpOnly cookie
+    const cookie = context.request.headers.get('Cookie') || '';
+    const token = parseCookie(cookie, 'ppk_token');
+
+    if (!token) {
+      return Response.json({ error: 'กรุณาเข้าสู่ระบบ' }, { status: 401, headers: corsHeaders() });
+    }
+
+    // Verify JWT
+    const payload = await verifyJWT(token, context.env.JWT_SECRET || 'ppk-canteen-dev-secret-2025');
+    if (!payload) {
+      return Response.json({ error: 'Token ไม่ถูกต้องหรือหมดอายุ' }, { status: 401, headers: corsHeaders() });
+    }
+
+    // Load user from DB
+    const user = await context.env.DB.prepare(
+      'SELECT id, phone, name, role, stall_id, email, is_active FROM users WHERE id = ? AND is_active = 1'
+    ).bind(payload.sub).first();
+
+    if (!user) {
+      return Response.json({ error: 'ไม่พบผู้ใช้งาน' }, { status: 401, headers: corsHeaders() });
+    }
+
+    context.data = context.data || {};
+    context.data.user = user;
+
     return addCors(await context.next());
+  } catch (err) {
+    return Response.json({ error: 'Internal server error' }, { status: 500, headers: corsHeaders() });
   }
-
-  // Get JWT from httpOnly cookie
-  const cookie = context.request.headers.get('Cookie') || '';
-  const token = parseCookie(cookie, 'ppk_token');
-
-  if (!token) {
-    return Response.json({ error: 'กรุณาเข้าสู่ระบบ' }, { status: 401, headers: corsHeaders() });
-  }
-
-  if (!jwtSecret) {
-    return Response.json({ error: 'ระบบยังไม่พร้อมใช้งาน (JWT secret not configured)' }, { status: 500, headers: corsHeaders() });
-  }
-
-  // Verify JWT
-  const payload = await verifyJWT(token, jwtSecret);
-  if (!payload) {
-    return Response.json({ error: 'Token ไม่ถูกต้องหรือหมดอายุ' }, { status: 401, headers: corsHeaders() });
-  }
-
-  // Load user from DB
-  const user = await context.env.DB.prepare(
-    'SELECT id, phone, name, role, stall_id, email, is_active FROM users WHERE id = ? AND is_active = 1'
-  ).bind(payload.sub).first();
-
-  if (!user) {
-    return Response.json({ error: 'ไม่พบผู้ใช้งาน' }, { status: 401, headers: corsHeaders() });
-  }
-
-  context.data = context.data || {};
-  context.data.user = user;
-
-  return addCors(await context.next());
 }
 
 // ── JWT Utilities (HS256 via Web Crypto) ──
@@ -137,9 +136,7 @@ function corsHeaders() {
 
 function addCors(response) {
   const newResp = new Response(response.body, response);
-  if (!newResp.headers.has('Content-Type')) {
-    newResp.headers.set('Content-Type', 'application/json');
-  }
+  newResp.headers.set('Content-Type', 'application/json');
   return newResp;
 }
 
