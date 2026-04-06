@@ -60,22 +60,22 @@ async function pgDashboard() {
 
   const s = stats.data || {};
   el.innerHTML = `
-    <div class="page-header"><h1>📊 แดชบอร์ด</h1></div>
+    <div class="page-header"><h1>แดชบอร์ด</h1></div>
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-value">${s.total_stalls || 0}</div><div class="stat-label">ร้านค้าทั้งหมด</div></div>
       <div class="stat-card"><div class="stat-value">${s.occupied_stalls || 0}</div><div class="stat-label">มีผู้เช่า</div></div>
-      <div class="stat-card"><div class="stat-value">${s.pending_payments || 0}</div><div class="stat-label">รอตรวจสอบชำระ</div></div>
-      <div class="stat-card"><div class="stat-value">${formatMoney(s.monthly_revenue || 0)}</div><div class="stat-label">รายได้เดือนนี้</div></div>
+      <div class="stat-card warning"><div class="stat-value">${s.pending_payments || 0}</div><div class="stat-label">รอตรวจสอบชำระ</div></div>
+      <div class="stat-card info"><div class="stat-value">${formatMoney(s.monthly_revenue || 0)}</div><div class="stat-label">รายได้เดือนนี้</div></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px">
       <div class="card">
-        <div class="card-header"><h3>⚠️ บิลค้างชำระ</h3></div>
+        <div class="card-header"><h3>บิลค้างชำระ</h3></div>
         ${renderTable([
           {key:'stall_name',label:'ร้าน'},{key:'total_amount',label:'ยอด',money:true},{key:'due_date',label:'ครบกำหนด',date:true}
         ], bills.data || [])}
       </div>
       <div class="card">
-        <div class="card-header"><h3>💳 รอตรวจสอบ</h3></div>
+        <div class="card-header"><h3>รอตรวจสอบ</h3></div>
         ${renderTable([
           {key:'stall_name',label:'ร้าน'},{key:'amount',label:'ยอด',money:true},{key:'method',label:'ช่องทาง'}
         ], payments.data || [])}
@@ -91,7 +91,7 @@ async function pgDashboardStallOwner(el, user) {
   const b = bills.data || [];
   const c = (contract.data || [])[0] || {};
   el.innerHTML = `
-    <div class="page-header"><h1>🏪 ร้านของฉัน</h1></div>
+    <div class="page-header"><h1>ร้านของฉัน</h1></div>
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-value">${formatMoney(c.monthly_rent || 0)}</div><div class="stat-label">ค่าเช่า/เดือน</div></div>
       <div class="stat-card"><div class="stat-value">${b.filter(x=>x.status==='overdue').length}</div><div class="stat-label">บิลค้างชำระ</div></div>
@@ -109,7 +109,7 @@ async function pgDashboardExec(el, user) {
   const stats = await callAPI('GET', '/reports/dashboard-stats');
   const s = stats.data || {};
   el.innerHTML = `
-    <div class="page-header"><h1>📊 แดชบอร์ดผู้บริหาร</h1></div>
+    <div class="page-header"><h1>แดชบอร์ดผู้บริหาร</h1></div>
     <div class="stats-grid">
       <div class="stat-card"><div class="stat-value">${s.total_stalls || 0}</div><div class="stat-label">ร้านค้าทั้งหมด</div></div>
       <div class="stat-card"><div class="stat-value">${s.occupied_stalls || 0}</div><div class="stat-label">มีผู้เช่า</div></div>
@@ -129,7 +129,7 @@ async function pgStalls() {
 
   el.innerHTML = `
     <div class="page-header">
-      <h1>🏪 จัดการร้านค้า</h1>
+      <h1>จัดการร้านค้า</h1>
       <button class="btn btn-primary" onclick="showStallForm()">+ เพิ่มร้านค้า</button>
     </div>
     <div class="card">
@@ -201,7 +201,7 @@ async function pgContracts() {
   const data = res.data || [];
 
   el.innerHTML = `
-    <div class="page-header"><h1>📋 สัญญาเช่า</h1><button class="btn btn-primary" onclick="showContractForm()">+ สร้างสัญญา</button></div>
+    <div class="page-header"><h1>สัญญาเช่า</h1><button class="btn btn-primary" onclick="showContractForm()">+ สร้างสัญญา</button></div>
     <div class="card">
       ${renderTable([
         {key:'id',label:'เลขที่'},{key:'stall_name',label:'ร้าน'},{key:'tenant_name',label:'ผู้เช่า'},
@@ -265,7 +265,7 @@ async function pgUsers() {
   const data = res.data || [];
 
   el.innerHTML = `
-    <div class="page-header"><h1>👥 ผู้ใช้งาน</h1><button class="btn btn-primary" onclick="showUserForm()">+ เพิ่มผู้ใช้</button></div>
+    <div class="page-header"><h1>ผู้ใช้งาน</h1><button class="btn btn-primary" onclick="showUserForm()">+ เพิ่มผู้ใช้</button></div>
     <div class="card">
       ${renderTable([
         {key:'id',label:'รหัส'},{key:'name',label:'ชื่อ'},{key:'phone',label:'เบอร์โทร'},
@@ -335,7 +335,7 @@ async function pgDocuments() {
   const el = document.getElementById('content');
   const res = await callAPI('GET', '/documents');
   el.innerHTML = `
-    <div class="page-header"><h1>📁 เอกสาร</h1><button class="btn btn-primary" onclick="showDocUploadForm()">+ อัปโหลดเอกสาร</button></div>
+    <div class="page-header"><h1>เอกสาร</h1><button class="btn btn-primary" onclick="showDocUploadForm()">+ อัปโหลดเอกสาร</button></div>
     <div class="card">
       ${renderTable([
         {key:'stall_name',label:'ร้าน'},{key:'type',label:'ประเภท',render:v=>DOC_TYPES[v]||v},
@@ -391,7 +391,7 @@ async function pgBiddings() {
   const el = document.getElementById('content');
   const res = await callAPI('GET', '/biddings');
   el.innerHTML = `
-    <div class="page-header"><h1>🔨 จัดการประมูล</h1><button class="btn btn-primary" onclick="showBiddingForm()">+ สร้างประมูล</button></div>
+    <div class="page-header"><h1>จัดการประมูล</h1><button class="btn btn-primary" onclick="showBiddingForm()">+ สร้างประมูล</button></div>
     <div class="card">
       ${renderTable([
         {key:'id',label:'รหัส'},{key:'title',label:'หัวข้อ'},{key:'stall_name',label:'ร้าน'},
@@ -467,7 +467,7 @@ async function pgBillingPeriods() {
   const el = document.getElementById('content');
   const res = await callAPI('GET', '/billing/periods');
   el.innerHTML = `
-    <div class="page-header"><h1>📅 รอบบิล</h1><button class="btn btn-primary" onclick="showBillingPeriodForm()">+ สร้างรอบบิลใหม่</button></div>
+    <div class="page-header"><h1>รอบบิล</h1><button class="btn btn-primary" onclick="showBillingPeriodForm()">+ สร้างรอบบิลใหม่</button></div>
     <div class="card">
       ${renderTable([
         {key:'id',label:'รหัส'},{key:'year',label:'ปี'},{key:'month',label:'เดือน',render:v=>THAI_MONTHS[v-1]||v},
@@ -539,7 +539,7 @@ async function pgMeterRead() {
   const periodOpts = periods.map(p => `<option value="${p.id}" ${p.id===selectedPeriod?'selected':''}>${THAI_MONTHS[(p.month||1)-1]} ${p.year}</option>`).join('');
 
   el.innerHTML = `
-    <div class="page-header"><h1>📷 จดมิเตอร์</h1></div>
+    <div class="page-header"><h1>จดมิเตอร์</h1></div>
     <div class="card">
       <div class="card-header">
         <div style="display:flex;gap:1rem;align-items:center">
@@ -668,7 +668,7 @@ async function pgMeterHistory() {
   const el = document.getElementById('content');
   const res = await callAPI('GET', '/billing/readings?limit=50');
   el.innerHTML = `
-    <div class="page-header"><h1>📋 ประวัติจดมิเตอร์</h1></div>
+    <div class="page-header"><h1>ประวัติจดมิเตอร์</h1></div>
     <div class="card">
       ${renderTable([
         {key:'stall_name',label:'ร้าน'},{key:'type',label:'ประเภท',render:v=>v==='water'?'💧 น้ำ':'⚡ ไฟ'},
@@ -686,7 +686,7 @@ async function pgBills() {
   const el = document.getElementById('content');
   const res = await callAPI('GET', '/billing/bills');
   el.innerHTML = `
-    <div class="page-header"><h1>💰 ใบแจ้งหนี้</h1></div>
+    <div class="page-header"><h1>ใบแจ้งหนี้</h1></div>
     <div class="card">
       <div class="tabs" style="margin-bottom:1rem">
         <button class="tab active" onclick="filterBills(this,'all')">ทั้งหมด</button>
@@ -766,7 +766,7 @@ async function pgPayments() {
 
   const res = await callAPI('GET', '/payments' + (billId ? '?bill_id=' + billId : ''));
   el.innerHTML = `
-    <div class="page-header"><h1>💳 การชำระเงิน</h1><button class="btn btn-primary" onclick="showPaymentForm()">+ บันทึกชำระ</button></div>
+    <div class="page-header"><h1>การชำระเงิน</h1><button class="btn btn-primary" onclick="showPaymentForm()">+ บันทึกชำระ</button></div>
     <div class="card">
       <div class="tabs" style="margin-bottom:1rem">
         <button class="tab active" onclick="filterPayments(this,'all')">ทั้งหมด</button>
@@ -849,7 +849,7 @@ async function pgReceipts() {
   const el = document.getElementById('content');
   const res = await callAPI('GET', '/receipts');
   el.innerHTML = `
-    <div class="page-header"><h1>🧾 ใบเสร็จรับเงิน</h1></div>
+    <div class="page-header"><h1>ใบเสร็จรับเงิน</h1></div>
     <div class="card">
       ${renderTable([
         {key:'receipt_no',label:'เลขที่'},{key:'stall_name',label:'ร้าน'},{key:'amount',label:'ยอด',money:true},
@@ -902,7 +902,7 @@ async function pgInspections() {
   const canInspect = ['admin','inspector'].includes(user.role);
 
   el.innerHTML = `
-    <div class="page-header"><h1>🔍 ตรวจสุขอนามัย</h1>${canInspect ? '<button class="btn btn-primary" onclick="showInspectionForm()">+ ตรวจร้าน</button>' : ''}</div>
+    <div class="page-header"><h1>ตรวจสุขอนามัย</h1>${canInspect ? '<button class="btn btn-primary" onclick="showInspectionForm()">+ ตรวจร้าน</button>' : ''}</div>
     <div class="card">
       ${renderTable([
         {key:'stall_name',label:'ร้าน'},{key:'inspection_date',label:'วันตรวจ',date:true},
@@ -999,7 +999,7 @@ async function pgPenalties() {
   const el = document.getElementById('content');
   const res = await callAPI('GET', '/penalties');
   el.innerHTML = `
-    <div class="page-header"><h1>⚠️ เตือน/ลงโทษ</h1><button class="btn btn-primary" onclick="showPenaltyForm()">+ สร้างการเตือน</button></div>
+    <div class="page-header"><h1>เตือน/ลงโทษ</h1><button class="btn btn-primary" onclick="showPenaltyForm()">+ สร้างการเตือน</button></div>
     <div class="card">
       ${renderTable([
         {key:'stall_name',label:'ร้าน'},{key:'type',label:'ประเภท',badge:STATUS_PENALTY},
@@ -1049,7 +1049,7 @@ async function pgMenusAdmin() {
     callAPI('GET', '/menus/price-changes?status=pending')
   ]);
   el.innerHTML = `
-    <div class="page-header"><h1>🍜 เมนู/ราคา</h1></div>
+    <div class="page-header"><h1>เมนู/ราคา</h1></div>
     ${(priceRes.data||[]).length ? `
       <div class="card" style="border-left:4px solid #D97706;margin-bottom:1rem">
         <div class="card-header"><h3>⏳ รอนุมัติเปลี่ยนราคา (${priceRes.data.length})</h3></div>
@@ -1089,7 +1089,7 @@ async function pgComplaintsAdmin() {
   const el = document.getElementById('content');
   const res = await callAPI('GET', '/complaints');
   el.innerHTML = `
-    <div class="page-header"><h1>📢 ข้อร้องเรียน</h1></div>
+    <div class="page-header"><h1>ข้อร้องเรียน</h1></div>
     <div class="card">
       ${renderTable([
         {key:'tracking_code',label:'รหัสติดตาม'},{key:'stall_name',label:'ร้าน'},
@@ -1144,7 +1144,7 @@ window.saveComplaintResponse = async function(e, id) {
 async function pgReports() {
   const el = document.getElementById('content');
   el.innerHTML = `
-    <div class="page-header"><h1>📈 รายงาน</h1></div>
+    <div class="page-header"><h1>รายงาน</h1></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem">
       <div class="card" style="cursor:pointer" onclick="runReport('revenue')">
         <div style="padding:1.5rem;text-align:center"><div style="font-size:2rem">💰</div><h3>รายงานรายได้</h3><p style="color:#6B7280">สรุปรายได้ตามเดือน/ปี</p></div>
@@ -1178,7 +1178,7 @@ async function pgActivityLog() {
   const el = document.getElementById('content');
   const res = await callAPI('GET', '/settings/audit-log?limit=100');
   el.innerHTML = `
-    <div class="page-header"><h1>📝 ประวัติการใช้งาน</h1></div>
+    <div class="page-header"><h1>ประวัติการใช้งาน</h1></div>
     <div class="card">
       ${renderTable([
         {key:'created_at',label:'เวลา',render:v=>formatDateTime(v)},{key:'user_name',label:'ผู้ใช้'},
@@ -1197,7 +1197,7 @@ async function pgSettings() {
   (res.data || []).forEach(r => { s[r.key] = r.value; });
 
   el.innerHTML = `
-    <div class="page-header"><h1>⚙️ ตั้งค่าระบบ</h1></div>
+    <div class="page-header"><h1>ตั้งค่าระบบ</h1></div>
     <form class="card" onsubmit="saveSettings(event)" style="padding:1.5rem">
       <h3>ข้อมูลทั่วไป</h3>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
@@ -1263,7 +1263,7 @@ async function pgProfile() {
   if (res.error) { el.innerHTML = '<p class="text-center">ไม่สามารถโหลดข้อมูลได้</p>'; return; }
   const u = res.data;
   el.innerHTML = `
-    <div class="page-header"><h1>👤 โปรไฟล์</h1></div>
+    <div class="page-header"><h1>โปรไฟล์</h1></div>
     <div class="card" style="max-width:600px">
       <div class="card-header"><h3 class="card-title">ข้อมูลส่วนตัว</h3></div>
       <form onsubmit="saveProfile(event)">
@@ -1307,7 +1307,7 @@ async function pgNotifications() {
   const el = document.getElementById('content');
   const res = await callAPI('GET', '/notifications');
   el.innerHTML = `
-    <div class="page-header"><h1>🔔 การแจ้งเตือน</h1><button class="btn btn-secondary" onclick="markAllRead()">✓ อ่านทั้งหมด</button></div>
+    <div class="page-header"><h1>การแจ้งเตือน</h1><button class="btn btn-secondary" onclick="markAllRead()">✓ อ่านทั้งหมด</button></div>
     <div class="card">
       ${(res.data||[]).length ? (res.data||[]).map(n => `
         <div style="padding:1rem;border-bottom:1px solid #E5E7EB;background:${n.is_read?'transparent':'#F0FDF4'};cursor:pointer" onclick="markRead('${n.id}')">
@@ -1340,7 +1340,7 @@ async function pgRecordWater() {
   const periodOpts = periods.map(p => `<option value="${p.id}" ${p.id===selectedPeriod?'selected':''}>${THAI_MONTHS[(p.month||1)-1]} ${p.year}</option>`).join('');
 
   el.innerHTML = `
-    <div class="page-header"><h1>💧 บันทึกค่าน้ำ</h1></div>
+    <div class="page-header"><h1>บันทึกค่าน้ำ</h1></div>
     <div class="card">
       <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
         <label class="form-label" style="margin:0">รอบบิล:</label>
@@ -1437,7 +1437,7 @@ async function pgRecordElectric() {
   const periodOpts = periods.map(p => `<option value="${p.id}" ${p.id===selectedPeriod?'selected':''}>${THAI_MONTHS[(p.month||1)-1]} ${p.year}</option>`).join('');
 
   el.innerHTML = `
-    <div class="page-header"><h1>⚡ บันทึกค่าไฟ</h1></div>
+    <div class="page-header"><h1>บันทึกค่าไฟ</h1></div>
     <div class="card">
       <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
         <label class="form-label" style="margin:0">รอบบิล:</label>
@@ -1498,7 +1498,7 @@ async function pgNotifyBills() {
   const periodOpts = periods.map(p => `<option value="${p.id}">${THAI_MONTHS[(p.month||1)-1]} ${p.year} (${p.status==='open'?'เปิด':'ปิด'})</option>`).join('');
 
   el.innerHTML = `
-    <div class="page-header"><h1>📢 แจ้งยอดชำระ</h1></div>
+    <div class="page-header"><h1>แจ้งยอดชำระ</h1></div>
     <div class="card">
       <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
         <label class="form-label" style="margin:0">รอบบิล:</label>
@@ -1586,7 +1586,7 @@ async function pgCheckSlips() {
   const periodOpts = periods.map(p => `<option value="${p.id}">${THAI_MONTHS[(p.month||1)-1]} ${p.year}</option>`).join('');
 
   el.innerHTML = `
-    <div class="page-header"><h1>🔍 ตรวจสลิป</h1></div>
+    <div class="page-header"><h1>ตรวจสลิป</h1></div>
     <div class="card">
       <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
         <label class="form-label" style="margin:0">รอบบิล:</label>
@@ -1704,7 +1704,7 @@ async function pgUploadSlip() {
   const unpaid = bills.filter(b => !paidBillIds.includes(b.id));
 
   el.innerHTML = `
-    <div class="page-header"><h1>📤 ส่งสลิป</h1></div>
+    <div class="page-header"><h1>ส่งสลิป</h1></div>
     ${unpaid.length ? `
     <div style="display:grid;gap:1rem;max-width:600px">
       ${unpaid.map(b => `
@@ -1799,7 +1799,7 @@ async function pgMyBills() {
   const user = getCurrentUser();
   const res = await callAPI('GET', '/billing/bills?stall_id=' + user.stall_id);
   el.innerHTML = `
-    <div class="page-header"><h1>💰 ใบแจ้งหนี้ของฉัน</h1></div>
+    <div class="page-header"><h1>ใบแจ้งหนี้ของฉัน</h1></div>
     <div class="card">
       ${renderTable([
         {key:'id',label:'เลขที่'},{key:'period_label',label:'รอบ'},
@@ -1818,7 +1818,7 @@ async function pgMyPayments() {
   const user = getCurrentUser();
   const res = await callAPI('GET', '/payments?stall_id=' + user.stall_id);
   el.innerHTML = `
-    <div class="page-header"><h1>💳 ประวัติชำระเงิน</h1></div>
+    <div class="page-header"><h1>ประวัติชำระเงิน</h1></div>
     <div class="card">
       ${renderTable([
         {key:'bill_id',label:'บิล'},{key:'amount',label:'ยอด',money:true},
@@ -1857,7 +1857,7 @@ async function pgMyContract() {
   const res = await callAPI('GET', '/contracts?stall_id=' + user.stall_id + '&status=active');
   const c = (res.data || [])[0] || {};
   el.innerHTML = `
-    <div class="page-header"><h1>📋 สัญญาเช่าของฉัน</h1></div>
+    <div class="page-header"><h1>สัญญาเช่าของฉัน</h1></div>
     <div class="card" style="padding:1.5rem">
       ${Object.keys(c).length ? `
         <table style="width:100%">
@@ -1879,7 +1879,7 @@ async function pgMyMenus() {
   const user = getCurrentUser();
   const res = await callAPI('GET', '/menus?stall_id=' + user.stall_id);
   el.innerHTML = `
-    <div class="page-header"><h1>🍜 จัดการเมนู</h1><button class="btn btn-primary" onclick="showMyMenuForm()">+ เพิ่มเมนู</button></div>
+    <div class="page-header"><h1>จัดการเมนู</h1><button class="btn btn-primary" onclick="showMyMenuForm()">+ เพิ่มเมนู</button></div>
     <div class="card">
       ${renderTable([
         {key:'name',label:'ชื่อเมนู'},{key:'price',label:'ราคา',money:true},
@@ -1944,7 +1944,7 @@ async function pgMyInspections() {
   const user = getCurrentUser();
   const res = await callAPI('GET', '/inspections?stall_id=' + user.stall_id);
   el.innerHTML = `
-    <div class="page-header"><h1>🔍 ผลตรวจสุขอนามัย</h1></div>
+    <div class="page-header"><h1>ผลตรวจสุขอนามัย</h1></div>
     <div class="card">
       ${renderTable([
         {key:'inspection_date',label:'วันตรวจ',date:true},{key:'score',label:'คะแนน',render:v=>`<strong>${v||0}</strong>/100`},

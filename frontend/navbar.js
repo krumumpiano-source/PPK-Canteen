@@ -10,21 +10,21 @@ function renderNavbar(user) {
   const sidebarHTML = `
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <div style="font-size:2rem">🍽️</div>
+        <div style="font-size:1.8rem;margin-bottom:2px">🍽️</div>
         <h2>โรงอาหาร PPK</h2>
         <small>ระบบจัดการโรงอาหาร</small>
       </div>
       <nav class="sidebar-nav">
         ${menus.map(item => {
-          if ('section' in item) return item.section ? `<div class="sidebar-section">${item.section}</div>` : '<div style="margin:0.5rem 0"></div>';
+          if ('section' in item) return item.section ? `<div class="sidebar-section">${item.section}</div>` : '<div style="margin:4px 0"></div>';
           return `<a href="#/${item.path}" data-page="${item.path}" onclick="closeSidebar()">${item.icon} ${item.label}</a>`;
         }).join('')}
       </nav>
       <div class="sidebar-footer">
         <div class="user-info">${escapeHtml(user.name)}</div>
         <div class="user-role">${ROLE_NAMES[role] || role}</div>
-        <button onclick="logout()" class="btn btn-sm btn-outline" style="margin-top:8px;width:100%;border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7)">
-          🚪 ออกจากระบบ
+        <button onclick="logout()" class="btn btn-sm btn-outline" style="margin-top:10px;width:100%;border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.5);font-size:.8rem">
+          ออกจากระบบ
         </button>
       </div>
     </aside>`;
