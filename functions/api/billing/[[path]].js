@@ -86,6 +86,7 @@ async function listReadings(DB, request) {
   const url = new URL(request.url);
   const periodId = url.searchParams.get('period_id');
   const stallId = url.searchParams.get('stall_id');
+  const type = url.searchParams.get('type');
   const limit = url.searchParams.get('limit') || 100;
 
   let sql = `SELECT mr.*, s.name as stall_name, u.name as reader_name
@@ -93,6 +94,7 @@ async function listReadings(DB, request) {
   const params = [];
   if (periodId) { sql += ' AND mr.billing_period_id = ?'; params.push(periodId); }
   if (stallId) { sql += ' AND mr.stall_id = ?'; params.push(stallId); }
+  if (type) { sql += ' AND mr.type = ?'; params.push(type); }
   sql += ' ORDER BY mr.read_at DESC LIMIT ?';
   params.push(parseInt(limit));
 
@@ -175,6 +177,7 @@ async function listBills(DB, request) {
   const url = new URL(request.url);
   const status = url.searchParams.get('status');
   const stallId = url.searchParams.get('stall_id');
+  const periodId = url.searchParams.get('period_id');
   const limit = url.searchParams.get('limit') || 100;
 
   let sql = `SELECT b.*, s.name as stall_name,
@@ -182,6 +185,7 @@ async function listBills(DB, request) {
     FROM bills b LEFT JOIN stalls s ON b.stall_id = s.id
     LEFT JOIN billing_periods bp ON b.billing_period_id = bp.id WHERE 1=1`;
   const params = [];
+  if (periodId) { sql += ' AND b.billing_period_id = ?'; params.push(periodId); }
   if (status) {
     const statuses = status.split(',');
     sql += ` AND b.status IN (${statuses.map(() => '?').join(',')})`;

@@ -57,9 +57,13 @@ function getMenusForRole(role) {
     m.push({ path: 'biddings', label: 'จัดการประมูล', icon: '🔨' });
     m.push({ section: 'การเงิน' });
     m.push({ path: 'billing-periods', label: 'รอบบิล', icon: '📅' });
+    m.push({ path: 'record-water', label: 'บันทึกค่าน้ำ', icon: '💧' });
+    m.push({ path: 'record-electric', label: 'บันทึกค่าไฟ', icon: '⚡' });
+    m.push({ path: 'notify-bills', label: 'แจ้งยอดชำระ', icon: '📢' });
+    m.push({ path: 'check-slips', label: 'ตรวจสลิป', icon: '🔍' });
+    m.push({ path: 'receipts', label: 'ใบเสร็จ', icon: '🧾' });
     m.push({ path: 'bills', label: 'ใบแจ้งหนี้', icon: '💰' });
     m.push({ path: 'payments', label: 'การชำระเงิน', icon: '💳' });
-    m.push({ path: 'receipts', label: 'ใบเสร็จ', icon: '🧾' });
     m.push({ section: 'คุณภาพ' });
     m.push({ path: 'inspections', label: 'ตรวจสุขอนามัย', icon: '🔍' });
     m.push({ path: 'penalties', label: 'เตือน/ลงโทษ', icon: '⚠️' });
@@ -73,22 +77,25 @@ function getMenusForRole(role) {
 
   if (role === 'meter_reader') {
     m.push({ section: 'จดมิเตอร์' });
-    m.push({ path: 'meter-read', label: 'จดมิเตอร์', icon: '📷' });
+    m.push({ path: 'record-water', label: 'บันทึกค่าน้ำ', icon: '💧' });
+    m.push({ path: 'record-electric', label: 'บันทึกค่าไฟ', icon: '⚡' });
+    m.push({ path: 'meter-read', label: 'จดมิเตอร์ (เดิม)', icon: '📷' });
     m.push({ path: 'meter-history', label: 'ประวัติจดมิเตอร์', icon: '📋' });
   }
 
   if (role === 'billing_officer') {
     m.push({ section: 'การเงิน' });
     m.push({ path: 'billing-periods', label: 'รอบบิล', icon: '📅' });
-    m.push({ path: 'meter-read', label: 'จดมิเตอร์', icon: '📷' });
-    m.push({ path: 'bills', label: 'ใบแจ้งหนี้', icon: '💰' });
-    m.push({ path: 'payments', label: 'บันทึกชำระ', icon: '💳' });
+    m.push({ path: 'record-water', label: 'บันทึกค่าน้ำ', icon: '💧' });
+    m.push({ path: 'record-electric', label: 'บันทึกค่าไฟ', icon: '⚡' });
+    m.push({ path: 'notify-bills', label: 'แจ้งยอดชำระ', icon: '📢' });
+    m.push({ path: 'check-slips', label: 'ตรวจสลิป', icon: '🔍' });
     m.push({ path: 'receipts', label: 'ใบเสร็จ', icon: '🧾' });
   }
 
   if (role === 'payment_verifier') {
     m.push({ section: 'ตรวจสอบ' });
-    m.push({ path: 'payments', label: 'ตรวจสอบชำระ', icon: '✅' });
+    m.push({ path: 'check-slips', label: 'ตรวจสลิป', icon: '🔍' });
     m.push({ path: 'receipts', label: 'ใบเสร็จ', icon: '🧾' });
   }
 
@@ -108,7 +115,8 @@ function getMenusForRole(role) {
   if (role === 'stall_owner') {
     m.push({ section: 'ร้านของฉัน' });
     m.push({ path: 'my-bills', label: 'ใบแจ้งหนี้', icon: '💰' });
-    m.push({ path: 'my-payments', label: 'ชำระเงิน', icon: '💳' });
+    m.push({ path: 'upload-slip', label: 'ส่งสลิป', icon: '📤' });
+    m.push({ path: 'my-payments', label: 'ประวัติชำระ', icon: '💳' });
     m.push({ path: 'my-contract', label: 'สัญญาเช่า', icon: '📋' });
     m.push({ path: 'my-menus', label: 'จัดการเมนู', icon: '🍜' });
     m.push({ path: 'my-inspections', label: 'ผลตรวจ', icon: '🔍' });

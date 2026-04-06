@@ -26,9 +26,11 @@ async function listPayments(DB, request, user) {
     LEFT JOIN users u ON p.recorded_by = u.id LEFT JOIN users v ON p.verified_by = v.id WHERE 1=1`;
   const params = [];
 
+  const periodId = url.searchParams.get('period_id');
   if (status) { sql += ' AND p.status = ?'; params.push(status); }
   if (billId) { sql += ' AND p.bill_id = ?'; params.push(billId); }
   if (stallId) { sql += ' AND p.stall_id = ?'; params.push(stallId); }
+  if (periodId) { sql += ' AND p.bill_id IN (SELECT id FROM bills WHERE billing_period_id = ?)'; params.push(periodId); }
   // stall_owner can only see own
   if (user.role === 'stall_owner' && user.stall_id) {
     sql += ' AND p.stall_id = ?'; params.push(user.stall_id);
