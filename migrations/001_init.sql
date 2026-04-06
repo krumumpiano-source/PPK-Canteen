@@ -1,4 +1,4 @@
-﻿-- =============================================
+-- =============================================
 -- PPK-Canteen Database Schema v1.0
 -- ระบบจัดการโรงอาหาร โรงเรียนพะเยาพิทยาคม
 -- Cloudflare D1 (SQLite)
@@ -112,6 +112,14 @@ CREATE TABLE IF NOT EXISTS documents (
   file_name TEXT,
   expires_at TEXT,
   uploaded_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 8.1 files (binary storage in base64 for small attachments)
+CREATE TABLE IF NOT EXISTS files (
+  id TEXT PRIMARY KEY,
+  data TEXT NOT NULL,
+  content_type TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
 );
 
 -- 9. billing_periods

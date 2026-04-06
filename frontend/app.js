@@ -334,7 +334,7 @@ async function pgDocuments() {
         {key:'stall_name',label:'ร้าน'},{key:'type',label:'ประเภท',render:v=>DOC_TYPES[v]||v},
         {key:'file_name',label:'ชื่อไฟล์'},{key:'expires_at',label:'หมดอายุ',date:true},{key:'uploaded_at',label:'อัปโหลด',date:true}
       ], res.data || [], row => `
-        <button class="btn btn-sm btn-secondary" onclick="viewDocument('${row.id}')">ดู</button>
+        <button class="btn btn-sm btn-secondary" onclick="viewDocument('${row.file_key}')">ดู</button>
         <button class="btn btn-sm btn-danger" onclick="deleteDocument('${row.id}')">ลบ</button>
       `)}
     </div>`;
@@ -369,7 +369,7 @@ window.uploadDocument = async function(e) {
   toast('อัปโหลดสำเร็จ', 'success'); closeModal(); pgDocuments();
 };
 
-window.viewDocument = function(id) { window.open('/api/upload/documents/' + id, '_blank'); };
+window.viewDocument = function(fileKey) { window.open('/api/upload/' + fileKey, '_blank'); };
 window.deleteDocument = async function(id) {
   if (!await confirmDialog('ต้องการลบเอกสารนี้?',{danger:true})) return;
   const res = await callAPI('DELETE', '/documents/' + id);
@@ -785,7 +785,7 @@ function renderPaymentsTable(data) {
       btns += `<button class="btn btn-sm btn-success" onclick="verifyPayment('${row.id}','verified')">อนุมัติ</button> `;
       btns += `<button class="btn btn-sm btn-danger" onclick="verifyPayment('${row.id}','rejected')">ปฏิเสธ</button> `;
     }
-    if (row.slip_photo_key) btns += `<button class="btn btn-sm btn-secondary" onclick="viewSlip('${row.id}')">ดูสลิป</button>`;
+    if (row.slip_photo_key) btns += `<button class="btn btn-sm btn-secondary" onclick="viewSlip('${row.slip_photo_key}')">ดูสลิป</button>`;
     return btns;
   });
 }
@@ -833,7 +833,7 @@ window.verifyPayment = async function(id, status) {
   toast(`${action}สำเร็จ`, 'success'); pgPayments();
 };
 
-window.viewSlip = function(id) { window.open('/api/upload/slips/' + id, '_blank'); };
+window.viewSlip = function(fileKey) { window.open('/api/upload/' + fileKey, '_blank'); };
 
 // ═══════════════════════════════════════════════
 // RECEIPTS (ใบเสร็จ)
@@ -880,7 +880,7 @@ window.printReceipt = async function(id) {
 
 window.cancelReceipt = async function(id) {
   if (!await confirmDialog('ยกเลิกใบเสร็จนี้?',{danger:true})) return;
-  const res = await callAPI('PUT', '/receipts/' + id + '/cancel');
+  const res = await callAPI('POST', '/receipts/' + id + '/cancel');
   if (res.error) return toast(res.error,'error');
   toast('ยกเลิกสำเร็จ','success'); pgReceipts();
 };
@@ -1271,7 +1271,7 @@ window.markRead = async function(id) {
 };
 
 window.markAllRead = async function() {
-  await callAPI('PUT', '/notifications/mark-all-read');
+  await callAPI('POST', '/notifications/mark-all-read');
   toast('อ่านทั้งหมดแล้ว', 'success'); pgNotifications();
 };
 

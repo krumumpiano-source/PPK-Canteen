@@ -23,7 +23,7 @@ function renderNavbar(user) {
       <div class="sidebar-footer">
         <div class="user-info">${escapeHtml(user.name)}</div>
         <div class="user-role">${ROLE_NAMES[role] || role}</div>
-        <button onclick="logout()" style="margin-top:8px;width:100%" class="btn btn-sm btn-outline" style="border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7)">
+        <button onclick="logout()" class="btn btn-sm btn-outline" style="margin-top:8px;width:100%;border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7)">
           🚪 ออกจากระบบ
         </button>
       </div>

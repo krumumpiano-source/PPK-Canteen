@@ -175,6 +175,7 @@ async function compressImage(file, maxWidth = 1200, quality = 0.7) {
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       canvas.toBlob(blob => resolve(blob), 'image/jpeg', quality);
     };
+    img.onerror = () => resolve(file);
     img.src = URL.createObjectURL(file);
   });
 }

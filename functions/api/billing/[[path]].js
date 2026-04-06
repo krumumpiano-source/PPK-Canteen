@@ -131,7 +131,7 @@ async function createReading(DB, context, user) {
   const prev = await DB.prepare(
     `SELECT curr_reading FROM meter_readings WHERE stall_id = ? AND type = ? ORDER BY read_at DESC LIMIT 1`
   ).bind(body.stall_id, body.type).first();
-  const prevReading = body.prev_reading || prev?.curr_reading || 0;
+  const prevReading = body.prev_reading ?? prev?.curr_reading ?? 0;
 
   await DB.prepare(
     `INSERT INTO meter_readings (id, stall_id, billing_period_id, type, prev_reading, curr_reading, photo_key, read_by, read_at, is_confirmed)

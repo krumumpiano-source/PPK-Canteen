@@ -1,4 +1,4 @@
-﻿/* PPK-Canteen — Auth API
+/* PPK-Canteen — Auth API
    POST /api/auth/login
    POST /api/auth/logout
    POST /api/auth/set-password  (first-time setup via token)
@@ -20,7 +20,7 @@ export async function onRequest(context) {
 
     return Response.json({ error: 'Not found' }, { status: 404 });
   } catch (err) {
-    return Response.json({ error: err.message, stack: err.stack }, { status: 500 });
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }
 

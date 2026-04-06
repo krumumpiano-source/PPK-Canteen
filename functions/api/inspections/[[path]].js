@@ -9,7 +9,7 @@ export async function onRequest(context) {
 
   if (path.length === 0 && method === 'GET') return listInspections(DB, context.request, user);
   if (path.length === 0 && method === 'POST') return createInspection(DB, context.request, user);
-  if (path.length === 1 && method === 'GET') return getInspection(DB, path[0]);
+  if (path.length === 1 && method === 'GET') return getInspection(DB, path[0], user);
 
   return Response.json({ error: 'Not found' }, { status: 404 });
 }
@@ -58,10 +58,11 @@ async function createInspection(DB, request, user) {
   return Response.json({ data: { id } }, { status: 201 });
 }
 
-async function getInspection(DB, id) {
+async function getInspection(DB, id, user) {
   const row = await DB.prepare(
     'SELECT i.*, s.name as stall_name, u.name as inspector_name FROM inspections i LEFT JOIN stalls s ON i.stall_id = s.id LEFT JOIN users u ON i.inspected_by = u.id WHERE i.id = ?'
   ).bind(id).first();
   if (!row) return Response.json({ error: 'ไม่พบข้อมูล' }, { status: 404 });
+  if (user.role === 'stall_owner' && user.stall_id && row.stall_id !== user.stall_id) return Response.json({ error: 'Forbidden' }, { status: 403 });
   return Response.json({ data: row });
 }

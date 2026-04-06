@@ -1,9 +1,10 @@
-﻿/* PPK-Canteen — API Middleware: JWT Auth + RBAC */
+/* PPK-Canteen — API Middleware: JWT Auth + RBAC */
 
 const PUBLIC_PREFIXES = ['/api/auth/login', '/api/auth/set-password', '/api/biddings/public', '/api/menus/public', '/api/complaints/public'];
 
 export async function onRequest(context) {
   const { pathname } = new URL(context.request.url);
+  const jwtSecret = context.env.JWT_SECRET;
 
   // CORS for same-origin (Pages Functions are same origin, but just in case)
   if (context.request.method === 'OPTIONS') {
@@ -23,8 +24,12 @@ export async function onRequest(context) {
     return Response.json({ error: 'กรุณาเข้าสู่ระบบ' }, { status: 401, headers: corsHeaders() });
   }
 
+  if (!jwtSecret) {
+    return Response.json({ error: 'ระบบยังไม่พร้อมใช้งาน (JWT secret not configured)' }, { status: 500, headers: corsHeaders() });
+  }
+
   // Verify JWT
-  const payload = await verifyJWT(token, context.env.JWT_SECRET || 'ppk-canteen-dev-secret-2025');
+  const payload = await verifyJWT(token, jwtSecret);
   if (!payload) {
     return Response.json({ error: 'Token ไม่ถูกต้องหรือหมดอายุ' }, { status: 401, headers: corsHeaders() });
   }
@@ -132,7 +137,9 @@ function corsHeaders() {
 
 function addCors(response) {
   const newResp = new Response(response.body, response);
-  newResp.headers.set('Content-Type', 'application/json');
+  if (!newResp.headers.has('Content-Type')) {
+    newResp.headers.set('Content-Type', 'application/json');
+  }
   return newResp;
 }
 

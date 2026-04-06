@@ -1,4 +1,4 @@
-﻿/* PPK-Canteen — Documents API (D1 file storage) */
+/* PPK-Canteen — Documents API (D1 file storage) */
 import { auditLog } from '../_middleware.js';
 
 export async function onRequest(context) {
@@ -16,22 +16,23 @@ export async function onRequest(context) {
 
 async function listDocuments(DB, request) {
   const url = new URL(request.url);
-  const category = url.searchParams.get('category');
-  let sql = 'SELECT d.*, u.name as uploaded_by_name FROM documents d LEFT JOIN users u ON d.uploaded_by = u.id';
+  const type = url.searchParams.get('type');
+  let sql = 'SELECT d.*, s.name as stall_name FROM documents d LEFT JOIN stalls s ON d.stall_id = s.id';
   const params = [];
-  if (category) { sql += ' WHERE d.category = ?'; params.push(category); }
-  sql += ' ORDER BY d.created_at DESC';
+  if (type) { sql += ' WHERE d.type = ?'; params.push(type); }
+  sql += ' ORDER BY d.uploaded_at DESC';
   const { results } = await DB.prepare(sql).bind(...params).all();
   return Response.json({ data: results });
 }
 
 async function uploadDocument(DB, request, user) {
-  if (!['admin', 'finance'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  if (!['admin', 'billing_officer'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
   const form = await request.formData();
   const file = form.get('file');
-  const title = form.get('title') || '';
-  const category = form.get('category') || 'general';
+  const stall_id = form.get('stall_id') || null;
+  const type = form.get('type') || 'other';
+  const expires_at = form.get('expires_at') || null;
 
   if (!file) return Response.json({ error: 'ไม่พบไฟล์' }, { status: 400 });
 
@@ -44,10 +45,10 @@ async function uploadDocument(DB, request, user) {
   await DB.prepare("INSERT INTO files (id, data, content_type) VALUES (?, ?, ?)").bind(fileId, base64, file.type || 'application/octet-stream').run();
 
   await DB.prepare(
-    "INSERT INTO documents (id, title, category, file_name, file_type, file_size, r2_key, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))"
-  ).bind(id, title, category, file.name || 'file', file.type || 'application/octet-stream', buf.byteLength, fileId, user.id).run();
+    "INSERT INTO documents (id, stall_id, type, file_key, file_name, expires_at) VALUES (?, ?, ?, ?, ?, ?)"
+  ).bind(id, stall_id, type, fileId, file.name || 'file', expires_at).run();
 
-  await auditLog(DB, user.id, 'create', 'documents', id, { title, category });
+  await auditLog(DB, user.id, 'create', 'documents', id, { type, stall_id });
   return Response.json({ data: { id } }, { status: 201 });
 }
 
@@ -57,8 +58,8 @@ async function deleteDocument(DB, id, user) {
   const doc = await DB.prepare('SELECT * FROM documents WHERE id = ?').bind(id).first();
   if (!doc) return Response.json({ error: 'Not found' }, { status: 404 });
 
-  if (doc.r2_key) { try { await DB.prepare('DELETE FROM files WHERE id = ?').bind(doc.r2_key).run(); } catch(_){} }
+  if (doc.file_key) { try { await DB.prepare('DELETE FROM files WHERE id = ?').bind(doc.file_key).run(); } catch(_){} }
   await DB.prepare('DELETE FROM documents WHERE id = ?').bind(id).run();
-  await auditLog(DB, user.id, 'delete', 'documents', id, { title: doc.title });
+  await auditLog(DB, user.id, 'delete', 'documents', id, { type: doc.type });
   return Response.json({ ok: true });
 }
