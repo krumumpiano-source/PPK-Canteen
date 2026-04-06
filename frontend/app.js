@@ -1260,11 +1260,14 @@ async function pgProfile() {
     <div class="page-header"><h1>👤 โปรไฟล์</h1></div>
     <div class="card" style="padding:1.5rem;max-width:600px">
       <h3 style="margin:0 0 1rem">ข้อมูลส่วนตัว</h3>
-      <div class="form-group"><label>ชื่อ</label><div style="padding:0.5rem 0;font-size:1.05rem">${escapeHtml(u.name)}</div></div>
-      <div class="form-group"><label>เบอร์โทร</label><div style="padding:0.5rem 0;font-size:1.05rem">${escapeHtml(u.phone)}</div></div>
-      <div class="form-group"><label>อีเมล</label><div style="padding:0.5rem 0;font-size:1.05rem">${u.email ? escapeHtml(u.email) : '<span style="color:#9CA3AF">ยังไม่ได้ตั้ง</span>'}</div></div>
-      <div class="form-group"><label>บทบาท</label><div style="padding:0.5rem 0"><span class="badge badge-primary">${ROLE_NAMES[u.role] || u.role}</span></div></div>
-      ${u.stall_id ? `<div class="form-group"><label>ร้านค้า</label><div style="padding:0.5rem 0">${escapeHtml(u.stall_id)}</div></div>` : ''}
+      <form onsubmit="saveProfile(event)">
+        <div class="form-group"><label>ชื่อ</label><input type="text" name="name" value="${escapeHtml(u.name)}" required></div>
+        <div class="form-group"><label>เบอร์โทร</label><input type="tel" name="phone" value="${escapeHtml(u.phone)}" maxlength="10" required></div>
+        <div class="form-group"><label>อีเมล</label><input type="email" name="email" value="${u.email ? escapeHtml(u.email) : ''}" placeholder="example@email.com"></div>
+        <div class="form-group"><label>บทบาท</label><div style="padding:0.5rem 0"><span class="badge badge-primary">${ROLE_NAMES[u.role] || u.role}</span></div></div>
+        ${u.stall_id ? `<div class="form-group"><label>ร้านค้า</label><div style="padding:0.5rem 0">${escapeHtml(u.stall_id)}</div></div>` : ''}
+        <button type="submit" class="btn btn-primary">💾 บันทึกข้อมูล</button>
+      </form>
     </div>
     <div class="card" style="padding:1.5rem;max-width:600px;margin-top:1rem">
       <h3 style="margin:0 0 1rem">🔑 เปลี่ยนรหัสผ่าน</h3>
@@ -1276,6 +1279,20 @@ async function pgProfile() {
       </form>
     </div>`;
 }
+
+window.saveProfile = async function(e) {
+  e.preventDefault();
+  const data = getFormData(e.target);
+  const user = getCurrentUser();
+  const res = await callAPI('PUT', '/users/' + user.id, data);
+  if (res.error) return toast(res.error, 'error');
+  // Update local user data
+  setCurrentUser({ ...user, name: data.name, phone: data.phone, email: data.email || null });
+  toast('บันทึกข้อมูลสำเร็จ', 'success');
+  // Re-render navbar with updated name
+  document.getElementById('app').innerHTML = renderNavbar(getCurrentUser());
+  pgProfile();
+};
 
 // ═══════════════════════════════════════════════
 // NOTIFICATIONS (การแจ้งเตือน)
