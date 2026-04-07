@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="th">
 <head>
 <meta charset="UTF-8">
@@ -21,8 +21,8 @@
   const user = await checkAuth();
   if (!user) return;
 
-  // Render sidebar + topbar
-  document.getElementById('app').innerHTML = renderNavbar(user);
+  // Render sidebar + topbar (use getCurrentUser to apply role-switch override)
+  document.getElementById('app').innerHTML = renderNavbar(getCurrentUser());
 
   // Start router
   window.addEventListener('hashchange', handleRoute);
