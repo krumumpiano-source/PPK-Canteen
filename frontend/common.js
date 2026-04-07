@@ -199,3 +199,75 @@ const STATUS_INSPECTION = { pass: { text: 'ผ่าน', class: 'badge-success'
 const STATUS_PENALTY = { warning: { text: 'เตือน', class: 'badge-warning' }, fine: { text: 'ปรับ', class: 'badge-danger' }, suspension: { text: 'ระงับ', class: 'badge-danger' }, termination: { text: 'ยกเลิกสัญญา', class: 'badge-danger' } };
 const STATUS_PRICE = { pending: { text: 'รออนุมัติ', class: 'badge-warning' }, approved: { text: 'อนุมัติ', class: 'badge-success' }, rejected: { text: 'ปฏิเสธ', class: 'badge-danger' }, auto_rejected: { text: 'เกินเพดาน', class: 'badge-danger' } };
 const ROLE_NAMES = { admin: 'ผู้ดูแลระบบ', meter_reader: 'ผู้จดมิเตอร์', billing_officer: 'เจ้าหน้าที่บิล', payment_verifier: 'ผู้ตรวจสอบชำระ', inspector: 'ผู้ตรวจสุขอนามัย', executive: 'ผู้บริหาร', stall_owner: 'เจ้าของร้าน' };
+
+const THAI_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+
+// ═══════════════════════════════════════
+// ppkAlert / ppkConfirm — Beautiful Modal Dialogs
+// ═══════════════════════════════════════
+(function() {
+  let _resolve = null;
+
+  function _close(result) {
+    const overlay = document.getElementById('ppk-overlay');
+    if (!overlay) return;
+    overlay.classList.remove('ppk-show');
+    setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 250);
+    if (_resolve) { _resolve(result); _resolve = null; }
+  }
+
+  function _detectType(message) {
+    if (/ลบ|ล้าง|ยกเลิก|กู้คืน|reset|clear|delete|remove/i.test(message)) return 'danger';
+    if (/ไม่สำเร็จ|ผิดพลาด|error|ล้มเหลว|ไม่สามารถ|ไม่ได้/i.test(message)) return 'error';
+    if (/เรียบร้อย|สำเร็จ|บันทึก|อัปเดต|เพิ่ม|ส่ง/i.test(message)) return 'success';
+    if (/คำเตือน|ระวัง|⚠️|warning/i.test(message)) return 'warning';
+    return 'confirm';
+  }
+
+  const ICONS = { confirm: '❓', danger: '⚠️', error: '❌', success: '✅', info: 'ℹ️', warning: '⚠️' };
+  const TITLES = { confirm: 'ยืนยัน', danger: 'ยืนยันการดำเนินการ', error: 'เกิดข้อผิดพลาด', success: 'สำเร็จ', info: 'แจ้งเตือน', warning: 'คำเตือน' };
+
+  function _build(message, opts, showCancel) {
+    const type = opts.type || _detectType(message);
+    const icon = opts.icon || ICONS[type] || 'ℹ️';
+    const title = opts.title || TITLES[type] || 'แจ้งเตือน';
+    const overlay = document.createElement('div');
+    overlay.id = 'ppk-overlay';
+    overlay.innerHTML =
+      '<div id="ppk-box">' +
+        '<div id="ppk-icon-wrap" class="ppk-type-' + type + '">' + icon + '</div>' +
+        '<div id="ppk-title">' + escapeHtml(title) + '</div>' +
+        '<div id="ppk-msg">' + escapeHtml(message) + '</div>' +
+        '<div id="ppk-btns">' +
+          (showCancel ? '<button class="ppk-btn ppk-btn-cancel" id="ppk-cancel">' + (opts.cancelText || 'ยกเลิก') + '</button>' : '') +
+          '<button class="ppk-btn ppk-btn-ok' +
+            (type === 'danger' || type === 'error' ? ' ppk-danger' : '') +
+            (type === 'success' ? ' ppk-success' : '') +
+            (type === 'warning' ? ' ppk-warning' : '') +
+            '" id="ppk-ok">' + (opts.okText || (showCancel ? 'ยืนยัน' : 'ตกลง')) + '</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#ppk-ok').addEventListener('click', () => _close(true));
+    const cancelBtn = overlay.querySelector('#ppk-cancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => _close(false));
+    overlay.addEventListener('click', e => { if (e.target === overlay) _close(false); });
+    requestAnimationFrame(() => { requestAnimationFrame(() => { overlay.classList.add('ppk-show'); }); });
+  }
+
+  document.addEventListener('keydown', e => {
+    if (!document.getElementById('ppk-overlay')) return;
+    if (e.key === 'Escape') _close(false);
+    if (e.key === 'Enter') _close(true);
+  });
+
+  window.ppkConfirm = function(message, opts) {
+    opts = opts || {};
+    return new Promise(resolve => { _resolve = resolve; _build(message, opts, true); });
+  };
+
+  window.ppkAlert = function(message, opts) {
+    opts = opts || {};
+    return new Promise(resolve => { _resolve = resolve; _build(message, opts, false); });
+  };
+})();

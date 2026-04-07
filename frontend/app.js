@@ -52,69 +52,268 @@ async function pgDashboard() {
   if (user.role === 'executive') return pgDashboardExec(el, user);
 
   // Admin / officer dashboard
-  const [stats, bills, payments] = await Promise.all([
-    callAPI('GET', '/reports/dashboard-stats'),
-    callAPI('GET', '/billing/bills?status=overdue&limit=5'),
-    callAPI('GET', '/payments?status=pending&limit=5')
-  ]);
-
+  const stats = await callAPI('GET', '/reports/dashboard-stats');
   const s = stats.data || {};
+
+  // Admin Stats Bar
+  const pendingSlips = s.pending_payments || 0;
+  const overdueCount = s.overdue_bills || 0;
+  const collectionRate = s.collection_rate;
+
   el.innerHTML = `
-    <div class="page-header"><h1>แดชบอร์ด</h1></div>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-value">${s.total_stalls || 0}</div><div class="stat-label">ร้านค้าทั้งหมด</div></div>
-      <div class="stat-card"><div class="stat-value">${s.occupied_stalls || 0}</div><div class="stat-label">มีผู้เช่า</div></div>
-      <div class="stat-card warning"><div class="stat-value">${s.pending_payments || 0}</div><div class="stat-label">รอตรวจสอบชำระ</div></div>
-      <div class="stat-card info"><div class="stat-value">${formatMoney(s.monthly_revenue || 0)}</div><div class="stat-label">รายได้เดือนนี้</div></div>
+    <div class="admin-stats">
+      <div class="admin-stat" onclick="location.hash='#/stalls'">
+        <div class="admin-stat-icon">🏪</div>
+        <div class="admin-stat-value ok">${s.total_stalls || 0}</div>
+        <div class="admin-stat-label">ร้านค้าทั้งหมด</div>
+      </div>
+      <div class="admin-stat" onclick="location.hash='#/contracts'">
+        <div class="admin-stat-icon">📋</div>
+        <div class="admin-stat-value ok">${s.occupied_stalls || 0}</div>
+        <div class="admin-stat-label">มีผู้เช่า</div>
+      </div>
+      <div class="admin-stat" onclick="location.hash='#/check-slips'">
+        <div class="admin-stat-icon">🔍</div>
+        <div class="admin-stat-value ${pendingSlips > 0 ? 'danger' : 'ok'}">${pendingSlips}</div>
+        <div class="admin-stat-label">สลิปรอตรวจ</div>
+      </div>
+      <div class="admin-stat" onclick="location.hash='#/bills'">
+        <div class="admin-stat-icon">⏳</div>
+        <div class="admin-stat-value ${overdueCount > 0 ? 'danger' : 'ok'}">${overdueCount}</div>
+        <div class="admin-stat-label">บิลค้างชำระ</div>
+      </div>
+      <div class="admin-stat" onclick="location.hash='#/payments'">
+        <div class="admin-stat-icon">💰</div>
+        <div class="admin-stat-value">${collectionRate != null ? collectionRate + '%' : '—'}</div>
+        <div class="admin-stat-label">ชำระแล้วเดือนนี้</div>
+      </div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px">
-      <div class="card">
-        <div class="card-header"><h3>บิลค้างชำระ</h3></div>
-        ${renderTable([
-          {key:'stall_name',label:'ร้าน'},{key:'total_amount',label:'ยอด',money:true},{key:'due_date',label:'ครบกำหนด',date:true}
-        ], bills.data || [])}
-      </div>
-      <div class="card">
-        <div class="card-header"><h3>รอตรวจสอบ</h3></div>
-        ${renderTable([
-          {key:'stall_name',label:'ร้าน'},{key:'amount',label:'ยอด',money:true},{key:'method',label:'ช่องทาง'}
-        ], payments.data || [])}
-      </div>
-    </div>`;
+
+    <div class="hub-grid" id="adminHubGrid"></div>`;
+
+  // Build Hub Grid
+  buildAdminHubGrid(user);
+}
+
+function buildAdminHubGrid(user) {
+  const grid = document.getElementById('adminHubGrid');
+  if (!grid) return;
+  const isAdmin = user.role === 'admin';
+
+  const sections = [
+    { title: '📊 จัดการข้อมูล', items: [
+      { path: 'stalls', icon: '🏪', label: 'ร้านค้า', bg: '#F0FDF4' },
+      { path: 'contracts', icon: '📋', label: 'สัญญาเช่า', bg: '#EFF6FF' },
+      { path: 'users', icon: '👥', label: 'ผู้ใช้งาน', bg: '#EEF2FF' },
+      { path: 'documents', icon: '📁', label: 'เอกสาร', bg: '#FFF7ED' },
+      { path: 'biddings', icon: '🔨', label: 'ประมูล', bg: '#FFFBEB' },
+    ]},
+    { title: '💰 การเงิน', items: [
+      { path: 'billing-periods', icon: '📅', label: 'รอบบิล', bg: '#EFF6FF' },
+      { path: 'record-water', icon: '💧', label: 'บันทึกค่าน้ำ', bg: '#EFF6FF' },
+      { path: 'record-electric', icon: '⚡', label: 'บันทึกค่าไฟ', bg: '#FFFBEB' },
+      { path: 'notify-bills', icon: '📢', label: 'แจ้งยอดชำระ', bg: '#FEF2F2' },
+      { path: 'check-slips', icon: '🔍', label: 'ตรวจสลิป', bg: '#F0FDF4' },
+      { path: 'receipts', icon: '🧾', label: 'ใบเสร็จ', bg: '#FFFBEB' },
+      { path: 'bills', icon: '💰', label: 'ใบแจ้งหนี้', bg: '#EEF2FF' },
+      { path: 'payments', icon: '💳', label: 'การชำระเงิน', bg: '#F0FDF4' },
+    ]},
+    { title: '🔍 คุณภาพ', items: [
+      { path: 'inspections', icon: '🔍', label: 'ตรวจสุขอนามัย', bg: '#F0FDF4' },
+      { path: 'penalties', icon: '⚠️', label: 'เตือน/ลงโทษ', bg: '#FEF2F2' },
+      { path: 'menus-admin', icon: '🍜', label: 'เมนู/ราคา', bg: '#FFFBEB' },
+      { path: 'complaints-admin', icon: '📢', label: 'ข้อร้องเรียน', bg: '#FFF7ED' },
+    ]},
+    { title: '⚙️ ระบบ', items: [
+      { path: 'reports', icon: '📈', label: 'รายงาน', bg: '#EEF2FF' },
+      { path: 'activity-log', icon: '📝', label: 'ประวัติ', bg: '#F1F5F9' },
+      { path: 'settings', icon: '⚙️', label: 'ตั้งค่า', bg: '#F1F5F9' },
+    ]},
+  ];
+
+  // Filter sections based on role
+  const viewSections = isAdmin ? sections : sections.filter(s => s.title.includes('การเงิน'));
+
+  let html = '';
+  for (const sec of viewSections) {
+    html += `<div class="hub-section">${sec.title}</div>`;
+    for (const item of sec.items) {
+      html += `<a class="hub-item" href="#/${item.path}">
+        <div class="hub-icon" style="background:${item.bg}">${item.icon}</div>
+        <span class="hub-label">${item.label}</span>
+      </a>`;
+    }
+  }
+  grid.innerHTML = html;
 }
 
 async function pgDashboardStallOwner(el, user) {
-  const [bills, contract] = await Promise.all([
-    callAPI('GET', '/billing/bills?stall_id=' + user.stall_id + '&limit=5'),
-    callAPI('GET', '/contracts?stall_id=' + user.stall_id + '&status=active')
+  const [billsRes, contractRes, paymentsRes] = await Promise.all([
+    callAPI('GET', '/billing/bills?stall_id=' + user.stall_id + '&limit=10'),
+    callAPI('GET', '/contracts?stall_id=' + user.stall_id + '&status=active'),
+    callAPI('GET', '/payments?stall_id=' + user.stall_id + '&limit=5')
   ]);
-  const b = bills.data || [];
-  const c = (contract.data || [])[0] || {};
+  const bills = billsRes.data || [];
+  const contract = (contractRes.data || [])[0] || {};
+  const payments = paymentsRes.data || [];
+
+  // Find latest active bill
+  const activeBill = bills.find(b => b.status === 'issued' || b.status === 'overdue') || null;
+  const amount = activeBill ? (activeBill.total_amount || 0) : 0;
+
+  // Check if there's a pending/reviewing payment for this bill
+  let slipStatus = 'none';
+  let reviewNote = '';
+  let paymentId = null;
+  if (activeBill) {
+    const billPayment = payments.find(p => p.bill_id === activeBill.id);
+    if (billPayment) {
+      paymentId = billPayment.id;
+      if (billPayment.status === 'approved' || billPayment.status === 'verified') slipStatus = 'success';
+      else if (billPayment.status === 'rejected') { slipStatus = 'rejected'; reviewNote = billPayment.review_note || ''; }
+      else if (billPayment.status === 'pending') slipStatus = 'reviewing';
+    }
+  }
+
+  // Compute outstanding (overdue bills total)
+  const outstanding = bills.filter(b => b.status === 'overdue').reduce((sum, b) => sum + (b.total_amount || 0), 0);
+
+  // Period display
+  const periodLabel = activeBill ? (activeBill.period_label || '') : '';
+  const stallName = user.stall_name || contract.stall_name || 'ร้านของฉัน';
+  const firstName = user.name || '';
+
+  // Due date info
+  let dueDateHTML = '';
+  if (activeBill && activeBill.due_date && amount > 0 && slipStatus !== 'success') {
+    const dd = new Date(activeBill.due_date);
+    const ddStr = dd.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+    const daysLeft = Math.ceil((dd - new Date()) / (1000 * 60 * 60 * 24));
+    let cls = '';
+    let daysText = '';
+    if (daysLeft < 0) { cls = 'urgent'; daysText = ` (เลยกำหนดแล้ว ${Math.abs(daysLeft)} วัน)`; }
+    else if (daysLeft === 0) { cls = 'urgent'; daysText = ' (ครบกำหนดวันนี้!)'; }
+    else if (daysLeft <= 3) { cls = 'soon'; daysText = ` (เหลืออีก ${daysLeft} วัน)`; }
+    else if (daysLeft <= 7) { daysText = ` (เหลืออีก ${daysLeft} วัน)`; }
+    dueDateHTML = `<div class="hero-due-warning ${cls}">⏰ กรุณาชำระภายในวันที่ ${escapeHtml(ddStr)}${daysText}</div>`;
+  }
+
+  // Status badge
+  let badgeHTML = '';
+  if (slipStatus === 'success') badgeHTML = '<div class="hero-status paid">✅ ชำระแล้ว</div>';
+  else if (slipStatus === 'reviewing') badgeHTML = '<div class="hero-status pending">🔍 รอตรวจสอบ</div>';
+  else if (slipStatus === 'rejected') badgeHTML = '<div class="hero-status rejected">❌ สลิปไม่ผ่าน</div>';
+  else if (amount > 0) badgeHTML = '<div class="hero-status overdue">⏳ รอชำระ</div>';
+
+  // CTA button
+  let ctaHTML = '';
+  if (slipStatus === 'success') {
+    ctaHTML = '<button class="hero-cta success">✅ ชำระสำเร็จแล้ว</button>';
+  } else if (slipStatus === 'reviewing') {
+    ctaHTML = '<button class="hero-cta reviewing">🔍 อยู่ระหว่างตรวจสอบ</button>';
+  } else if (slipStatus === 'rejected') {
+    ctaHTML = `<button class="hero-cta rejected-cta" onclick="location.hash='#/upload-slip'">⚠️ สลิปไม่ผ่าน — กดส่งใหม่</button>`;
+  } else if (amount > 0) {
+    ctaHTML = `<button class="hero-cta" onclick="location.hash='#/upload-slip'">📤 ส่งสลิปชำระเงิน</button>`;
+  } else {
+    ctaHTML = '<button class="hero-cta success">🎉 ไม่มียอดค้างชำระ</button>';
+  }
+
+  // Bill breakdown
+  let breakdownHTML = '';
+  if (activeBill && amount > 0) {
+    const w = activeBill.water_amount || 0;
+    const e = activeBill.electric_amount || 0;
+    const r = activeBill.rent_amount || 0;
+    const c = activeBill.common_fee || 0;
+    if (w > 0 || e > 0 || r > 0 || c > 0) {
+      breakdownHTML = `<div class="hero-breakdown">
+        ${r > 0 ? `<div class="hb-item"><span class="hb-dot rent"></span><span class="hb-label">ค่าเช่า</span><span class="hb-val">${formatMoney(r)} บาท</span></div>` : ''}
+        ${w > 0 ? `<div class="hb-item"><span class="hb-dot water"></span><span class="hb-label">ค่าน้ำ</span><span class="hb-val">${formatMoney(w)} บาท</span></div>` : ''}
+        ${e > 0 ? `<div class="hb-item"><span class="hb-dot electric"></span><span class="hb-label">ค่าไฟ</span><span class="hb-val">${formatMoney(e)} บาท</span></div>` : ''}
+        ${c > 0 ? `<div class="hb-item"><span class="hb-dot common"></span><span class="hb-label">ค่าส่วนกลาง</span><span class="hb-val">${formatMoney(c)} บาท</span></div>` : ''}
+      </div>`;
+    }
+  }
+
+  // Rejection banner
+  let rejectHTML = '';
+  if (slipStatus === 'rejected') {
+    rejectHTML = `<div class="hero-reject-banner">⚠️ <strong>สลิปถูกปฏิเสธ</strong>${reviewNote ? '<br>เหตุผล: <strong>' + escapeHtml(reviewNote) + '</strong>' : ''}<br>กรุณากด <strong>"⚠️ สลิปไม่ผ่าน — กดส่งใหม่"</strong> เพื่ออัพโหลดสลิปใหม่</div>`;
+  }
+
+  // Cancel button
+  let cancelHTML = '';
+  if (slipStatus === 'reviewing' || slipStatus === 'rejected') {
+    cancelHTML = `<button class="hero-cancel-btn" onclick="cancelSlipFromDashboard(${paymentId})">🗑️ ยกเลิกสลิปที่ส่งไว้</button>`;
+  }
+
   el.innerHTML = `
-    <div class="page-header"><h1>ร้านของฉัน</h1></div>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-value">${formatMoney(c.monthly_rent || 0)}</div><div class="stat-label">ค่าเช่า/เดือน</div></div>
-      <div class="stat-card"><div class="stat-value">${b.filter(x=>x.status==='overdue').length}</div><div class="stat-label">บิลค้างชำระ</div></div>
-      <div class="stat-card"><div class="stat-value">${c.end_date ? formatDate(c.end_date) : '-'}</div><div class="stat-label">สัญญาหมดอายุ</div></div>
+    <div class="hero-payment">
+      <div class="hero-greeting">สวัสดี${firstName ? ', ' + escapeHtml(firstName) : ''}</div>
+      <div class="hero-stall">🏪 ${escapeHtml(stallName)}</div>
+      <hr class="hero-divider">
+      <div class="hero-row">
+        <div class="hero-col">
+          <div class="hero-label">💳 ยอดชำระเดือนนี้</div>
+          <div class="hero-amount${amount === 0 ? ' zero' : ''}">${amount > 0 ? formatMoney(amount) + ' บาท' : 'ยังไม่มียอดแจ้ง'}</div>
+          ${breakdownHTML}
+          <div class="hero-period">${periodLabel ? '📅 ' + escapeHtml(periodLabel) : ''}</div>
+        </div>
+        <div class="hero-col" style="text-align:right">${badgeHTML}</div>
+      </div>
+      ${dueDateHTML}
+      ${ctaHTML}
+      ${rejectHTML}
+      ${cancelHTML}
     </div>
+
+    ${outstanding > 0 && slipStatus !== 'success' ? `
+    <div class="outstanding-banner">
+      <div class="ob-icon">⚠️</div>
+      <div class="ob-info">
+        <div class="ob-label">ยอดค้างชำระทั้งหมด</div>
+        <div class="ob-amount">${formatMoney(outstanding)} บาท</div>
+      </div>
+      <button class="ob-btn" onclick="location.hash='#/my-bills'">ดูทั้งหมด</button>
+    </div>` : ''}
+
+    <div class="quick-actions">
+      <a class="quick-action" href="#/upload-slip"><div class="qa-icon" style="background:#F0FDF4">📤</div><span class="qa-label">ส่งสลิป</span></a>
+      <a class="quick-action" href="#/my-bills"><div class="qa-icon" style="background:#EFF6FF">💰</div><span class="qa-label">ใบแจ้งหนี้</span></a>
+      <a class="quick-action" href="#/my-payments"><div class="qa-icon" style="background:#FFFBEB">💳</div><span class="qa-label">ประวัติชำระ</span></a>
+      <a class="quick-action" href="#/my-menus"><div class="qa-icon" style="background:#FFF7ED">🍜</div><span class="qa-label">จัดการเมนู</span></a>
+    </div>
+
     <div class="card">
-      <div class="card-header"><h3>ใบแจ้งหนี้ล่าสุด</h3></div>
+      <div class="card-header"><h3>📋 ประวัติชำระล่าสุด</h3></div>
       ${renderTable([
-        {key:'id',label:'เลขที่'},{key:'total_amount',label:'ยอดรวม',money:true},{key:'status',label:'สถานะ',badge:STATUS_BILL},{key:'due_date',label:'ครบกำหนด',date:true}
-      ], b, row => row.status === 'issued' ? `<button class="btn btn-sm btn-primary" onclick="location.hash='#/my-payments?bill=${row.id}'">ชำระ</button>` : '')}
+        {key:'bill_id',label:'บิล'},{key:'amount',label:'ยอด',money:true},
+        {key:'method',label:'ช่องทาง',render:v=>({cash:'เงินสด',transfer:'โอน',promptpay:'PromptPay'}[v]||v)},
+        {key:'paid_at',label:'วันชำระ',date:true},{key:'status',label:'สถานะ',badge:STATUS_PAYMENT}
+      ], payments)}
     </div>`;
 }
+
+window.cancelSlipFromDashboard = async function(paymentId) {
+  if (!paymentId) return;
+  const ok = await ppkConfirm('ต้องการยกเลิกสลิปที่ส่งไว้?');
+  if (!ok) return;
+  const res = await callAPI('DELETE', '/payments/' + paymentId);
+  if (res.error) return toast(res.error, 'error');
+  toast('ยกเลิกสลิปแล้ว', 'success');
+  pgDashboard();
+};
 
 async function pgDashboardExec(el, user) {
   const stats = await callAPI('GET', '/reports/dashboard-stats');
   const s = stats.data || {};
   el.innerHTML = `
-    <div class="page-header"><h1>แดชบอร์ดผู้บริหาร</h1></div>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-value">${s.total_stalls || 0}</div><div class="stat-label">ร้านค้าทั้งหมด</div></div>
-      <div class="stat-card"><div class="stat-value">${s.occupied_stalls || 0}</div><div class="stat-label">มีผู้เช่า</div></div>
-      <div class="stat-card"><div class="stat-value">${formatMoney(s.total_revenue || 0)}</div><div class="stat-label">รายได้ปีงบฯ</div></div>
-      <div class="stat-card"><div class="stat-value">${s.avg_inspection || '-'}</div><div class="stat-label">คะแนนตรวจเฉลี่ย</div></div>
+    <div class="admin-stats">
+      <div class="admin-stat"><div class="admin-stat-icon">🏪</div><div class="admin-stat-value ok">${s.total_stalls || 0}</div><div class="admin-stat-label">ร้านค้าทั้งหมด</div></div>
+      <div class="admin-stat"><div class="admin-stat-icon">📋</div><div class="admin-stat-value ok">${s.occupied_stalls || 0}</div><div class="admin-stat-label">มีผู้เช่า</div></div>
+      <div class="admin-stat"><div class="admin-stat-icon">💰</div><div class="admin-stat-value">${formatMoney(s.total_revenue || 0)}</div><div class="admin-stat-label">รายได้ปีงบฯ</div></div>
+      <div class="admin-stat"><div class="admin-stat-icon">🔍</div><div class="admin-stat-value">${s.avg_inspection || '—'}</div><div class="admin-stat-label">คะแนนตรวจเฉลี่ย</div></div>
     </div>
     <div class="card"><div class="card-header"><h3>รายงานรายเดือน</h3></div><div id="exec-chart-container" style="height:300px;display:flex;align-items:center;justify-content:center"><small>กำลังโหลดกราฟ...</small></div></div>`;
 }
