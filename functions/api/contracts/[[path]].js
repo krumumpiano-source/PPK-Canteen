@@ -37,6 +37,11 @@ async function getContract(DB, id) {
 async function createContract(DB, request, user) {
   if (user.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 });
   const body = await request.json();
+
+  // Check for existing active contract on this stall
+  const existing = await DB.prepare("SELECT id FROM contracts WHERE stall_id = ? AND status = 'active' LIMIT 1").bind(body.stall_id).first();
+  if (existing) return Response.json({ error: 'ร้านค้านี้มีสัญญาเช่าที่ใช้งานอยู่แล้ว' }, { status: 400 });
+
   const id = 'CTR-' + Date.now().toString(36).toUpperCase();
 
   await DB.prepare(

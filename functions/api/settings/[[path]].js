@@ -47,6 +47,6 @@ async function getAuditLog(DB, request, user) {
   const limit = url.searchParams.get('limit') || 100;
   const { results } = await DB.prepare(
     'SELECT a.*, u.name as user_name FROM audit_log a LEFT JOIN users u ON a.user_id = u.id ORDER BY a.created_at DESC LIMIT ?'
-  ).bind(parseInt(limit)).all();
+  ).bind(Math.min(Math.max(parseInt(limit) || 100, 1), 1000)).all();
   return Response.json({ data: results });
 }

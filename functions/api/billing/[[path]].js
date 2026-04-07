@@ -96,7 +96,7 @@ async function listReadings(DB, request) {
   if (stallId) { sql += ' AND mr.stall_id = ?'; params.push(stallId); }
   if (type) { sql += ' AND mr.type = ?'; params.push(type); }
   sql += ' ORDER BY mr.read_at DESC LIMIT ?';
-  params.push(parseInt(limit));
+  params.push(Math.min(Math.max(parseInt(limit) || 100, 1), 1000));
 
   const { results } = await DB.prepare(sql).bind(...params).all();
   return Response.json({ data: results });
@@ -193,7 +193,7 @@ async function listBills(DB, request) {
   }
   if (stallId) { sql += ' AND b.stall_id = ?'; params.push(stallId); }
   sql += ' ORDER BY b.created_at DESC LIMIT ?';
-  params.push(parseInt(limit));
+  params.push(Math.min(Math.max(parseInt(limit) || 100, 1), 1000));
 
   const { results } = await DB.prepare(sql).bind(...params).all();
   return Response.json({ data: results });

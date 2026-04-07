@@ -134,7 +134,12 @@ function togglePw(btn) {
 }
 
 function showMessage(text, type) {
-  document.getElementById('message').innerHTML = `<div class="alert alert-${type}">${text}</div>`;
+  const div = document.createElement('div');
+  div.className = `alert alert-${type}`;
+  div.textContent = text;
+  const msg = document.getElementById('message');
+  msg.innerHTML = '';
+  msg.appendChild(div);
 }
 
 function showLoginForm() {

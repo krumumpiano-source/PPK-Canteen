@@ -322,6 +322,15 @@ async function pgDashboardStallOwner(el, user) {
     </div>`;
 }
 
+window.simulateStallOwner = function() {
+  const stallId = document.getElementById('sim-stall').value;
+  if (!stallId) return toast('กรุณาเลือกร้านค้า', 'warning');
+  const user = getCurrentUser();
+  _currentUser = null;
+  setCurrentUser({ ...user, stall_id: stallId });
+  pgDashboard();
+};
+
 window.cancelSlipFromDashboard = async function(paymentId) {
   if (!paymentId) return;
   const ok = await ppkConfirm('ต้องการยกเลิกสลิปที่ส่งไว้?');
@@ -493,7 +502,7 @@ window.showContractForm = async function(id) {
   ]);
   const stalls = stallsRes.data || [];
   const c = contract.data || {};
-  const stallOpts = stalls.map(s => `<option value="${s.id}" ${c.stall_id===s.id?'selected':''}>${s.name} (${s.zone||'-'})</option>`).join('');
+  const stallOpts = stalls.map(s => `<option value="${s.id}" ${c.stall_id===s.id?'selected':''}>${escapeHtml(s.name)} (${escapeHtml(s.zone||'-')})</option>`).join('');
 
   showModal(`
     <div class="modal-header"><h2>${id?'แก้ไข':'สร้าง'}สัญญาเช่า</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
@@ -560,7 +569,7 @@ window.showUserForm = async function(id) {
   const stalls = stallsRes.data || [];
   const u = userRes.data || {};
   const roles = Object.entries(ROLE_NAMES).map(([k,v])=>`<option value="${k}" ${u.role===k?'selected':''}>${v}</option>`).join('');
-  const stallOpts = stalls.map(s=>`<option value="${s.id}" ${u.stall_id===s.id?'selected':''}>${s.name}</option>`).join('');
+  const stallOpts = stalls.map(s=>`<option value="${s.id}" ${u.stall_id===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('');
 
   showModal(`
     <div class="modal-header"><h2>${id?'แก้ไข':'เพิ่ม'}ผู้ใช้</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
@@ -624,7 +633,7 @@ const DOC_TYPES = { id_card:'บัตรประชาชน', license:'ใบ
 
 window.showDocUploadForm = async function() {
   const stalls = (await callAPI('GET', '/stalls')).data || [];
-  const opts = stalls.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  const opts = stalls.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
   const typeOpts = Object.entries(DOC_TYPES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
   showModal(`
     <div class="modal-header"><h2>อัปโหลดเอกสาร</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
@@ -689,7 +698,7 @@ window.showBiddingForm = async function(id) {
     <div class="modal-header"><h2>${id?'แก้ไข':'สร้าง'}ประมูล</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
     <form onsubmit="saveBidding(event,'${id||''}')">
       <div class="modal-body">
-        <div class="form-group"><label>ร้านค้า *</label><select name="stall_id" required><option value="">-- เลือก --</option>${stalls.map(s=>`<option value="${s.id}" ${b.stall_id===s.id?'selected':''}>${s.name}</option>`).join('')}</select></div>
+        <div class="form-group"><label>ร้านค้า *</label><select name="stall_id" required><option value="">-- เลือก --</option>${stalls.map(s=>`<option value="${s.id}" ${b.stall_id===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('')}</select></div>
         <div class="form-group"><label>หัวข้อ *</label><input name="title" value="${escapeHtml(b.title||'')}" required></div>
         <div class="form-group"><label>รายละเอียด</label><textarea name="description">${escapeHtml(b.description||'')}</textarea></div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
@@ -1192,7 +1201,7 @@ window.showInspectionForm = async function() {
   let checklist = [];
   try { checklist = JSON.parse(settingsRes.data?.value || '[]'); } catch {}
 
-  const stallOpts = stalls.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  const stallOpts = stalls.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
   const checklistHTML = checklist.map((cat, ci) => `
     <div style="margin-bottom:1rem">
       <h4>${escapeHtml(cat.category)}</h4>
@@ -1286,7 +1295,7 @@ window.showPenaltyForm = async function() {
     <div class="modal-header"><h2>สร้างการเตือน/ลงโทษ</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
     <form onsubmit="savePenalty(event)">
       <div class="modal-body">
-        <div class="form-group"><label>ร้านค้า *</label><select name="stall_id" required><option value="">-- เลือก --</option>${stalls.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}</select></div>
+        <div class="form-group"><label>ร้านค้า *</label><select name="stall_id" required><option value="">-- เลือก --</option>${stalls.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select></div>
         <div class="form-group"><label>ประเภท *</label><select name="type" required><option value="warning">เตือน</option><option value="fine">ปรับ</option><option value="suspension">ระงับ</option><option value="termination">ยกเลิกสัญญา</option></select></div>
         <div class="form-group"><label>เหตุผล *</label><textarea name="reason" required></textarea></div>
         <div class="form-group"><label>ค่าปรับ (ถ้ามี)</label><input type="number" name="amount" step="0.01"></div>

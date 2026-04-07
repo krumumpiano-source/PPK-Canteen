@@ -37,7 +37,7 @@ async function listPayments(DB, request, user) {
     sql += ' AND p.stall_id = ?'; params.push(user.stall_id);
   }
   sql += ' ORDER BY p.created_at DESC LIMIT ?';
-  params.push(parseInt(limit));
+  params.push(Math.min(Math.max(parseInt(limit) || 100, 1), 1000));
 
   const { results } = await DB.prepare(sql).bind(...params).all();
   return Response.json({ data: results });
