@@ -622,6 +622,37 @@ td.right, th.right { text-align: right; }
 }
 .hero-cancel-btn:hover { background: rgba(220,38,38,0.15); }
 
+/* Stall Switcher (admin simulation) */
+.stall-switcher {
+  background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 8px; padding: 0.25rem 0.5rem; font-family: var(--font);
+  font-size: 0.82rem; cursor: pointer; margin-left: auto;
+  max-width: 180px; appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 6px center;
+  padding-right: 22px;
+}
+.stall-switcher option { color: #333; background: #fff; }
+.hero-stall { display: flex; align-items: center; gap: 0.4rem; }
+
+/* Owner Stats Cards */
+.owner-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.owner-stat-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 0.8rem; text-align: center;
+  transition: all 0.2s;
+}
+.owner-stat-card:hover { box-shadow: var(--shadow-md); }
+.owner-stat-icon {
+  width: 36px; height: 36px; border-radius: 10px; margin: 0 auto 0.4rem;
+  display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+}
+.owner-stat-val { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+.owner-stat-lbl { font-size: 0.72rem; color: var(--text-secondary); margin-top: 0.1rem; }
+
 /* ═══════════════════════════════════════
    OUTSTANDING BANNER
    ═══════════════════════════════════════ */

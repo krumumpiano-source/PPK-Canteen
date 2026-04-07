@@ -138,7 +138,6 @@ function getMenusForRole(role) {
 
   if (role === 'stall_owner') {
     m.push({ section: 'ร้านของฉัน' });
-    m.push({ path: 'my-bills', label: 'ใบแจ้งหนี้', icon: '💰', desc: 'ดูยอดแจ้งชำระ' });
     m.push({ path: 'upload-slip', label: 'ส่งสลิป', icon: '📤', desc: 'ส่งหลักฐานการชำระ' });
     m.push({ path: 'my-payments', label: 'ประวัติชำระ', icon: '💳', desc: 'ดูการชำระย้อนหลัง' });
     m.push({ path: 'my-contract', label: 'สัญญาเช่า', icon: '📋', desc: 'รายละเอียดสัญญา' });

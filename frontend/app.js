@@ -172,14 +172,16 @@ async function pgDashboardStallOwner(el, user) {
   }
 
   const stallId = user.stall_id;
-  const [billsRes, contractRes, paymentsRes] = await Promise.all([
-    callAPI('GET', '/billing/bills?stall_id=' + stallId + '&limit=10'),
+  const [billsRes, contractRes, paymentsRes, stallsRes] = await Promise.all([
+    callAPI('GET', '/billing/bills?stall_id=' + stallId + '&limit=20'),
     callAPI('GET', '/contracts?stall_id=' + stallId + '&status=active'),
-    callAPI('GET', '/payments?stall_id=' + stallId + '&limit=5')
+    callAPI('GET', '/payments?stall_id=' + stallId + '&limit=5'),
+    isSimulating ? callAPI('GET', '/stalls') : Promise.resolve(null)
   ]);
   const bills = billsRes.data || [];
   const contract = (contractRes.data || [])[0] || {};
   const payments = paymentsRes.data || [];
+  const allStalls = isSimulating ? (stallsRes?.data || []).filter(s => s.status === 'occupied') : [];
 
   // Find latest active bill
   const activeBill = bills.find(b => b.status === 'issued' || b.status === 'overdue') || null;
@@ -200,12 +202,20 @@ async function pgDashboardStallOwner(el, user) {
   }
 
   // Compute outstanding (overdue bills total)
-  const outstanding = bills.filter(b => b.status === 'overdue').reduce((sum, b) => sum + (b.total_amount || 0), 0);
+  const overdueBills = bills.filter(b => b.status === 'overdue');
+  const outstanding = overdueBills.reduce((sum, b) => sum + (b.total_amount || 0), 0);
 
   // Period display
   const periodLabel = activeBill ? (activeBill.period_label || '') : '';
   const stallName = user.stall_name || contract.stall_name || 'ร้านของฉัน';
   const firstName = user.name || '';
+
+  // Stall switcher (admin simulation)
+  let stallSwitcherHTML = '';
+  if (isSimulating && allStalls.length > 1) {
+    const opts = allStalls.map(s => `<option value="${s.id}" ${s.id === stallId ? 'selected' : ''}>${escapeHtml(s.name || s.zone + '-' + s.number)}</option>`).join('');
+    stallSwitcherHTML = `<select class="stall-switcher" onchange="switchSimStall(this.value)">${opts}</select>`;
+  }
 
   // Due date info
   let dueDateHTML = '';
@@ -272,10 +282,18 @@ async function pgDashboardStallOwner(el, user) {
     cancelHTML = `<button class="hero-cancel-btn" onclick="cancelSlipFromDashboard(${paymentId})">🗑️ ยกเลิกสลิปที่ส่งไว้</button>`;
   }
 
+  // Payment stats
+  const paidCount = bills.filter(b => b.status === 'paid').length;
+  const totalBills = bills.length;
+  const paidTotal = bills.filter(b => b.status === 'paid').reduce((s, b) => s + (b.total_amount || 0), 0);
+
   el.innerHTML = `
     <div class="hero-payment">
       <div class="hero-greeting">สวัสดี${firstName ? ', ' + escapeHtml(firstName) : ''}</div>
-      <div class="hero-stall">🏪 ${escapeHtml(stallName)}</div>
+      <div class="hero-stall">
+        <span>🏪 ${escapeHtml(stallName)}</span>
+        ${stallSwitcherHTML}
+      </div>
       <hr class="hero-divider">
       <div class="hero-row">
         <div class="hero-col">
@@ -296,17 +314,36 @@ async function pgDashboardStallOwner(el, user) {
     <div class="outstanding-banner">
       <div class="ob-icon">⚠️</div>
       <div class="ob-info">
-        <div class="ob-label">ยอดค้างชำระทั้งหมด</div>
+        <div class="ob-label">ยอดคงค้างสะสม</div>
         <div class="ob-amount">${formatMoney(outstanding)} บาท</div>
+        <div style="font-size:0.75rem;color:#92400E;margin-top:2px">${overdueBills.length} บิลค้างชำระ</div>
       </div>
-      <button class="ob-btn" onclick="location.hash='#/my-bills'">ดูทั้งหมด</button>
+      <button class="ob-btn" onclick="location.hash='#/upload-slip'">ส่งสลิป</button>
     </div>` : ''}
 
     <div class="quick-actions">
-      <a class="quick-action" href="#/upload-slip"><div class="qa-icon" style="background:#F0FDF4">📤</div><span class="qa-label">ส่งสลิป</span></a>
-      <a class="quick-action" href="#/my-bills"><div class="qa-icon" style="background:#EFF6FF">💰</div><span class="qa-label">ใบแจ้งหนี้</span></a>
-      <a class="quick-action" href="#/my-payments"><div class="qa-icon" style="background:#FFFBEB">💳</div><span class="qa-label">ประวัติชำระ</span></a>
-      <a class="quick-action" href="#/my-menus"><div class="qa-icon" style="background:#FFF7ED">🍜</div><span class="qa-label">จัดการเมนู</span></a>
+      <a class="quick-action" href="#/upload-slip"><div class="qa-icon" style="background:#EEF2FF">📤</div><span class="qa-label">ส่งสลิป</span></a>
+      <a class="quick-action" href="#/my-payments"><div class="qa-icon" style="background:#F0FDF4">💳</div><span class="qa-label">ประวัติชำระ</span></a>
+      <a class="quick-action" href="#/my-menus"><div class="qa-icon" style="background:#FFFBEB">🍜</div><span class="qa-label">จัดการเมนู</span></a>
+      <a class="quick-action" href="#/profile"><div class="qa-icon" style="background:#EFF6FF">⚙️</div><span class="qa-label">ตั้งค่า</span></a>
+    </div>
+
+    <div class="owner-stats">
+      <div class="owner-stat-card">
+        <div class="owner-stat-icon" style="background:#EEF2FF;color:#4F46E5">📊</div>
+        <div class="owner-stat-val">${paidCount}/${totalBills}</div>
+        <div class="owner-stat-lbl">บิลชำระแล้ว</div>
+      </div>
+      <div class="owner-stat-card">
+        <div class="owner-stat-icon" style="background:#F0FDF4;color:#059669">💰</div>
+        <div class="owner-stat-val">${formatMoney(paidTotal)}</div>
+        <div class="owner-stat-lbl">ชำระรวม (บาท)</div>
+      </div>
+      <div class="owner-stat-card">
+        <div class="owner-stat-icon" style="background:${outstanding > 0 ? '#FEF2F2' : '#F0FDF4'};color:${outstanding > 0 ? '#DC2626' : '#059669'}">⏳</div>
+        <div class="owner-stat-val" style="color:${outstanding > 0 ? '#DC2626' : 'inherit'}">${formatMoney(outstanding)}</div>
+        <div class="owner-stat-lbl">ค้างชำระ (บาท)</div>
+      </div>
     </div>
 
     <div class="card">
@@ -322,6 +359,14 @@ async function pgDashboardStallOwner(el, user) {
 window.simulateStallOwner = function() {
   const stallId = document.getElementById('sim-stall').value;
   if (!stallId) return toast('กรุณาเลือกร้านค้า', 'warning');
+  const user = getCurrentUser();
+  _currentUser = null;
+  setCurrentUser({ ...user, stall_id: stallId });
+  pgDashboard();
+};
+
+window.switchSimStall = function(stallId) {
+  if (!stallId) return;
   const user = getCurrentUser();
   _currentUser = null;
   setCurrentUser({ ...user, stall_id: stallId });
