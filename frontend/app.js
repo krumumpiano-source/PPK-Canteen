@@ -810,28 +810,53 @@ window.generateBills = async function(periodId) {
 // ═══════════════════════════════════════════════
 async function pgMeterRead() {
   const el = document.getElementById('content');
-  const periodsRes = await callAPI('GET', '/billing/periods?status=open');
-  const periods = periodsRes.data || [];
+  const now = new Date();
+  const curMonth = now.getMonth() + 1;
+  const curYear = now.getFullYear() + 543;
+  const monthOpts = THAI_MONTHS.map((m,i) => `<option value="${i+1}" ${(i+1)===curMonth?'selected':''}>${m}</option>`).join('');
 
+  // check if coming from billing-periods page with a specific period
   const params = new URLSearchParams(location.hash.split('?')[1] || '');
-  const selectedPeriod = params.get('period') || (periods[0]?.id || '');
-
-  const periodOpts = periods.map(p => `<option value="${p.id}" ${p.id===selectedPeriod?'selected':''}>${THAI_MONTHS[(p.month||1)-1]} ${p.year}</option>`).join('');
+  const periodParam = params.get('period');
 
   el.innerHTML = `
-    <div class="page-header"><h1>จดมิเตอร์</h1></div>
+    <div class="page-header"><h1>📝 จดมิเตอร์</h1></div>
     <div class="card">
       <div class="card-header">
-        <div style="display:flex;gap:1rem;align-items:center">
-          <label>รอบบิล:</label>
-          <select id="period-select" onchange="loadMeterStalls(this.value)" style="min-width:200px">${periodOpts}</select>
+        <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+          <label>เดือน:</label>
+          <select id="mr-month" style="min-width:150px">${monthOpts}</select>
+          <label>ปี (พ.ศ.):</label>
+          <input type="number" id="mr-year" value="${curYear}" style="width:100px">
+          <button class="btn btn-primary" onclick="startMeterRead()">📋 โหลดข้อมูล</button>
         </div>
       </div>
-      <div id="meter-stalls-container"><div class="loading">กำลังโหลด...</div></div>
+      <div id="meter-stalls-container"></div>
     </div>`;
 
-  if (selectedPeriod) loadMeterStalls(selectedPeriod);
+  if (periodParam) {
+    // load specific period and set selectors from it
+    const pRes = await callAPI('GET', '/billing/periods/' + periodParam);
+    if (pRes.data) {
+      document.getElementById('mr-month').value = pRes.data.month;
+      document.getElementById('mr-year').value = pRes.data.year;
+    }
+  }
+  startMeterRead();
 }
+
+window.startMeterRead = async function() {
+  const month = parseInt(document.getElementById('mr-month').value);
+  const year = parseInt(document.getElementById('mr-year').value);
+  if (!month || !year) return toast('กรุณาเลือกเดือนและปี', 'error');
+  const container = document.getElementById('meter-stalls-container');
+  container.innerHTML = '<div class="loading">กำลังโหลด...</div>';
+
+  const ensureRes = await callAPI('POST', '/billing/periods/ensure', { year, month });
+  if (ensureRes.error) return container.innerHTML = `<p style="color:var(--danger)">${escapeHtml(ensureRes.error)}</p>`;
+  window._mrPeriod = ensureRes.data.id;
+  loadMeterStalls(ensureRes.data.id);
+};
 
 window.loadMeterStalls = async function(periodId) {
   const [stallsRes, readingsRes] = await Promise.all([
@@ -1615,41 +1640,47 @@ window.markAllRead = async function() {
 // ═══════════════════════════════════════════════
 async function pgRecordWater() {
   const el = document.getElementById('content');
-  const periodsRes = await callAPI('GET', '/billing/periods?status=open');
-  const periods = periodsRes.data || [];
-  const params = new URLSearchParams(location.hash.split('?')[1] || '');
-  const selectedPeriod = params.get('period') || (periods[0]?.id || '');
-  const periodOpts = periods.map(p => `<option value="${p.id}" ${p.id===selectedPeriod?'selected':''}>${THAI_MONTHS[(p.month||1)-1]} ${p.year}</option>`).join('');
-
-  if (!periods.length) {
-    el.innerHTML = `
-      <div class="page-header"><h1>บันทึกค่าน้ำ</h1></div>
-      <div class="card" style="text-align:center;padding:3rem">
-        <div style="font-size:3rem;margin-bottom:1rem">💧</div>
-        <h3>ไม่มีรอบบิลที่เปิดอยู่</h3>
-        <p style="color:var(--text-secondary)">กรุณาสร้างรอบบิลใหม่ก่อน หรือเปิดรอบบิลที่ปิดไปแล้ว</p>
-        <a href="#/billing-periods" class="btn btn-primary" style="margin-top:1rem">📋 ไปหน้าจัดการรอบบิล</a>
-      </div>`;
-    return;
-  }
+  const now = new Date();
+  const curMonth = now.getMonth() + 1;
+  const curYear = now.getFullYear() + 543;
+  const monthOpts = THAI_MONTHS.map((m,i) => `<option value="${i+1}" ${(i+1)===curMonth?'selected':''}>${m}</option>`).join('');
 
   el.innerHTML = `
-    <div class="page-header"><h1>บันทึกค่าน้ำ</h1></div>
+    <div class="page-header"><h1>💧 บันทึกค่าน้ำ</h1></div>
     <div class="card">
       <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
-        <label class="form-label" style="margin:0">รอบบิล:</label>
-        <select class="form-select" id="rw-period" onchange="loadRecordWater(this.value)" style="max-width:250px">${periodOpts}</select>
+        <label class="form-label" style="margin:0">เดือน:</label>
+        <select class="form-select" id="rw-month" style="max-width:180px">${monthOpts}</select>
+        <label class="form-label" style="margin:0">ปี (พ.ศ.):</label>
+        <input type="number" class="form-input" id="rw-year" value="${curYear}" style="max-width:120px">
+        <button class="btn btn-primary" onclick="startRecordWater()">📋 โหลดข้อมูล</button>
       </div>
-      <div id="rw-container"><div class="loading">กำลังโหลด...</div></div>
+      <div id="rw-container"></div>
       <div id="rw-summary" style="display:none;margin-top:1rem;padding:1rem;background:#F0FDF4;border-radius:var(--radius-sm);gap:2rem;flex-wrap:wrap;font-size:.95rem">
         <span>📊 กรอกแล้ว: <strong id="rw-cnt">0</strong> ร้าน</span>
         <span>💧 รวมหน่วย: <strong id="rw-units">0</strong></span>
         <span>💰 รวมเงิน: <strong id="rw-amt">0</strong> บาท</span>
       </div>
-      <div style="margin-top:1rem"><button class="btn btn-primary" onclick="saveAllRecordWater()">💾 บันทึกทั้งหมด</button></div>
+      <div id="rw-actions" style="display:none;margin-top:1rem"><button class="btn btn-primary" onclick="saveAllRecordWater()">💾 บันทึกทั้งหมด</button></div>
     </div>`;
-  if (selectedPeriod) loadRecordWater(selectedPeriod);
+  startRecordWater();
 }
+
+window.startRecordWater = async function() {
+  const month = parseInt(document.getElementById('rw-month').value);
+  const year = parseInt(document.getElementById('rw-year').value);
+  if (!month || !year) return toast('กรุณาเลือกเดือนและปี', 'error');
+  const container = document.getElementById('rw-container');
+  container.innerHTML = '<div class="loading">กำลังโหลด...</div>';
+
+  // ensure period exists (auto-create if needed)
+  const ensureRes = await callAPI('POST', '/billing/periods/ensure', { year, month });
+  if (ensureRes.error) return container.innerHTML = `<p style="color:var(--danger)">${escapeHtml(ensureRes.error)}</p>`;
+  const period = ensureRes.data;
+  window._rwPeriod = period.id;
+
+  loadRecordWater(period.id);
+};
 
 window.loadRecordWater = async function(periodId) {
   const [stallsRes, readingsRes, periodRes] = await Promise.all([
@@ -1674,10 +1705,11 @@ window.loadRecordWater = async function(periodId) {
     </tr>`;
   }).join('');
 
-  document.getElementById('rw-container').innerHTML = `<div class="table-wrap"><table>
+  document.getElementById('rw-container').innerHTML = stalls.length ? `<div class="table-wrap"><table>
     <thead><tr><th>#</th><th>ร้านค้า</th><th>โซน</th><th>มิเตอร์ก่อน</th><th>มิเตอร์ปัจจุบัน</th><th>หน่วยใช้</th><th>ยอดเงิน</th><th>สถานะ</th></tr></thead>
-    <tbody id="rw-body">${rows}</tbody></table></div>`;
-  document.getElementById('rw-summary').style.display = 'flex';
+    <tbody id="rw-body">${rows}</tbody></table></div>` : '<p style="padding:1rem;text-align:center;color:var(--text-secondary)">ไม่มีร้านค้าที่มีผู้เช่า</p>';
+  document.getElementById('rw-summary').style.display = stalls.length ? 'flex' : 'none';
+  document.getElementById('rw-actions').style.display = stalls.length ? 'block' : 'none';
   updateMeterSummary('rw'); window._rwPeriod = periodId;
 };
 
@@ -1724,41 +1756,46 @@ async function saveAllMeterReadings(prefix, type, periodId) {
 // ═══════════════════════════════════════════════
 async function pgRecordElectric() {
   const el = document.getElementById('content');
-  const periodsRes = await callAPI('GET', '/billing/periods?status=open');
-  const periods = periodsRes.data || [];
-  const params = new URLSearchParams(location.hash.split('?')[1] || '');
-  const selectedPeriod = params.get('period') || (periods[0]?.id || '');
-  const periodOpts = periods.map(p => `<option value="${p.id}" ${p.id===selectedPeriod?'selected':''}>${THAI_MONTHS[(p.month||1)-1]} ${p.year}</option>`).join('');
-
-  if (!periods.length) {
-    el.innerHTML = `
-      <div class="page-header"><h1>บันทึกค่าไฟ</h1></div>
-      <div class="card" style="text-align:center;padding:3rem">
-        <div style="font-size:3rem;margin-bottom:1rem">⚡</div>
-        <h3>ไม่มีรอบบิลที่เปิดอยู่</h3>
-        <p style="color:var(--text-secondary)">กรุณาสร้างรอบบิลใหม่ก่อน หรือเปิดรอบบิลที่ปิดไปแล้ว</p>
-        <a href="#/billing-periods" class="btn btn-primary" style="margin-top:1rem">📋 ไปหน้าจัดการรอบบิล</a>
-      </div>`;
-    return;
-  }
+  const now = new Date();
+  const curMonth = now.getMonth() + 1;
+  const curYear = now.getFullYear() + 543;
+  const monthOpts = THAI_MONTHS.map((m,i) => `<option value="${i+1}" ${(i+1)===curMonth?'selected':''}>${m}</option>`).join('');
 
   el.innerHTML = `
-    <div class="page-header"><h1>บันทึกค่าไฟ</h1></div>
+    <div class="page-header"><h1>⚡ บันทึกค่าไฟ</h1></div>
     <div class="card">
       <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
-        <label class="form-label" style="margin:0">รอบบิล:</label>
-        <select class="form-select" id="re-period" onchange="loadRecordElectric(this.value)" style="max-width:250px">${periodOpts}</select>
+        <label class="form-label" style="margin:0">เดือน:</label>
+        <select class="form-select" id="re-month" style="max-width:180px">${monthOpts}</select>
+        <label class="form-label" style="margin:0">ปี (พ.ศ.):</label>
+        <input type="number" class="form-input" id="re-year" value="${curYear}" style="max-width:120px">
+        <button class="btn btn-primary" onclick="startRecordElectric()">📋 โหลดข้อมูล</button>
       </div>
-      <div id="re-container"><div class="loading">กำลังโหลด...</div></div>
+      <div id="re-container"></div>
       <div id="re-summary" style="display:none;margin-top:1rem;padding:1rem;background:#FFFBEB;border-radius:var(--radius-sm);gap:2rem;flex-wrap:wrap;font-size:.95rem">
         <span>📊 กรอกแล้ว: <strong id="re-cnt">0</strong> ร้าน</span>
         <span>⚡ รวมหน่วย: <strong id="re-units">0</strong></span>
         <span>💰 รวมเงิน: <strong id="re-amt">0</strong> บาท</span>
       </div>
-      <div style="margin-top:1rem"><button class="btn btn-primary" onclick="saveAllRecordElectric()">💾 บันทึกทั้งหมด</button></div>
+      <div id="re-actions" style="display:none;margin-top:1rem"><button class="btn btn-primary" onclick="saveAllRecordElectric()">💾 บันทึกทั้งหมด</button></div>
     </div>`;
-  if (selectedPeriod) loadRecordElectric(selectedPeriod);
+  startRecordElectric();
 }
+
+window.startRecordElectric = async function() {
+  const month = parseInt(document.getElementById('re-month').value);
+  const year = parseInt(document.getElementById('re-year').value);
+  if (!month || !year) return toast('กรุณาเลือกเดือนและปี', 'error');
+  const container = document.getElementById('re-container');
+  container.innerHTML = '<div class="loading">กำลังโหลด...</div>';
+
+  const ensureRes = await callAPI('POST', '/billing/periods/ensure', { year, month });
+  if (ensureRes.error) return container.innerHTML = `<p style="color:var(--danger)">${escapeHtml(ensureRes.error)}</p>`;
+  const period = ensureRes.data;
+  window._rePeriod = period.id;
+
+  loadRecordElectric(period.id);
+};
 
 window.loadRecordElectric = async function(periodId) {
   const [stallsRes, readingsRes, periodRes] = await Promise.all([
@@ -1783,10 +1820,11 @@ window.loadRecordElectric = async function(periodId) {
     </tr>`;
   }).join('');
 
-  document.getElementById('re-container').innerHTML = `<div class="table-wrap"><table>
+  document.getElementById('re-container').innerHTML = stalls.length ? `<div class="table-wrap"><table>
     <thead><tr><th>#</th><th>ร้านค้า</th><th>โซน</th><th>มิเตอร์ก่อน</th><th>มิเตอร์ปัจจุบัน</th><th>หน่วยใช้</th><th>ยอดเงิน</th><th>สถานะ</th></tr></thead>
-    <tbody id="re-body">${rows}</tbody></table></div>`;
-  document.getElementById('re-summary').style.display = 'flex';
+    <tbody id="re-body">${rows}</tbody></table></div>` : '<p style="padding:1rem;text-align:center;color:var(--text-secondary)">ไม่มีร้านค้าที่มีผู้เช่า</p>';
+  document.getElementById('re-summary').style.display = stalls.length ? 'flex' : 'none';
+  document.getElementById('re-actions').style.display = stalls.length ? 'block' : 'none';
   updateMeterSummary('re'); window._rePeriod = periodId;
 };
 

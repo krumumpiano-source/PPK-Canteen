@@ -17,6 +17,7 @@ export async function onRequest(context) {
   // /api/billing/periods
   if (path[0] === 'periods' && !path[1] && method === 'GET') return listPeriods(DB, context.request);
   if (path[0] === 'periods' && !path[1] && method === 'POST') return createPeriod(DB, context.request, user);
+  if (path[0] === 'periods' && path[1] === 'ensure' && method === 'POST') return ensurePeriod(DB, context.request, user);
   if (path[0] === 'periods' && path[1] && method === 'GET') return getPeriod(DB, path[1]);
   if (path[0] === 'periods' && path[1] && method === 'PUT') return updatePeriod(DB, context.request, path[1], user);
 
@@ -86,6 +87,33 @@ async function updatePeriod(DB, request, id, user) {
   vals.push(id);
   await DB.prepare(`UPDATE billing_periods SET ${fields.join(', ')} WHERE id = ?`).bind(...vals).run();
   return Response.json({ ok: true });
+}
+
+// ensure period exists for given year/month — auto-create with default rates if missing
+async function ensurePeriod(DB, request, user) {
+  if (!['admin', 'staff'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  const body = await request.json();
+  const year = parseInt(body.year);
+  const month = parseInt(body.month);
+  if (!year || !month || month < 1 || month > 12) return Response.json({ error: 'ปี/เดือนไม่ถูกต้อง' }, { status: 400 });
+
+  const id = `BP-${year}-${String(month).padStart(2, '0')}`;
+  const existing = await DB.prepare('SELECT * FROM billing_periods WHERE id = ?').bind(id).first();
+  if (existing) return Response.json({ data: existing });
+
+  // Get default rates from settings
+  const waterRow = await DB.prepare("SELECT value FROM settings WHERE key = 'water_rate'").first();
+  const electricRow = await DB.prepare("SELECT value FROM settings WHERE key = 'electric_rate'").first();
+  const waterRate = parseFloat(waterRow?.value) || 18;
+  const electricRate = parseFloat(electricRow?.value) || 8;
+
+  await DB.prepare(
+    `INSERT INTO billing_periods (id, year, month, water_rate, electric_rate, status) VALUES (?,?,?,?,?,?)`
+  ).bind(id, year, month, waterRate, electricRate, 'open').run();
+  await auditLog(DB, user.id, 'create', 'billing_periods', id, { auto: true });
+
+  const created = await DB.prepare('SELECT * FROM billing_periods WHERE id = ?').bind(id).first();
+  return Response.json({ data: created }, { status: 201 });
 }
 
 // ── Readings ──
