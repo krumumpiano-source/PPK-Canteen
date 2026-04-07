@@ -197,5 +197,7 @@ function switchViewRole(role) {
   document.getElementById('app').innerHTML = renderNavbar(freshUser);
   closeSidebar();
   location.hash = '#/dashboard';
+  // Force re-render even if already on dashboard (hashchange won't fire for same hash)
+  handleRoute();
   toast(`สลับมุมมอง: ${ROLE_NAMES[role] || role}`, 'info');
 }
