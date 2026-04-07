@@ -2086,111 +2086,250 @@ window.batchSendReceipts = async function() {
 async function pgUploadSlip() {
   const el = document.getElementById('content');
   const user = getCurrentUser();
-  el.innerHTML = `<div class="page-header"><h1>🧾 ส่งสลิป</h1></div><div class="loading">กำลังโหลด...</div>`;
+  el.innerHTML = `<div class="loading">กำลังโหลด...</div>`;
 
-  const billsRes = await callAPI('GET', '/billing/bills?stall_id=' + user.stall_id);
-  const bills = (billsRes.data || []).filter(b => b.status === 'issued' || b.status === 'overdue');
-  const paymentsRes = await callAPI('GET', '/payments?stall_id=' + user.stall_id);
-  const payments = paymentsRes.data || [];
-  const paidBillIds = payments.filter(p => p.status !== 'rejected').map(p => p.bill_id);
-  const unpaid = bills.filter(b => !paidBillIds.includes(b.id));
+  const stallId = user.stall_id;
+  const [billsRes, paymentsRes, contractRes] = await Promise.all([
+    callAPI('GET', '/billing/bills?stall_id=' + stallId + '&limit=20'),
+    callAPI('GET', '/payments?stall_id=' + stallId + '&limit=20'),
+    callAPI('GET', '/contracts?stall_id=' + stallId + '&status=active')
+  ]);
+  const allBills = billsRes.data || [];
+  const allPayments = paymentsRes.data || [];
+  const contract = (contractRes.data || [])[0] || {};
+  const stallName = user.stall_name || contract.stall_name || 'ร้านของฉัน';
+
+  // Find unpaid bills (issued/overdue, no pending/verified payment)
+  const paidBillIds = allPayments.filter(p => p.status !== 'rejected').map(p => p.bill_id);
+  const unpaidBills = allBills.filter(b => (b.status === 'issued' || b.status === 'overdue') && !paidBillIds.includes(b.id));
+  // Find pending payment for edit mode
+  const pendingPayment = allPayments.find(p => p.status === 'pending');
+
+  // Outstanding list HTML
+  let outstandingHTML = '';
+  if (unpaidBills.length > 1) {
+    outstandingHTML = `
+    <div class="slip-outstanding-panel">
+      <div class="outstanding-title">🔔 ยอดค้างชำระ ${unpaidBills.length} เดือน — เลือกเดือนที่ต้องการชำระ</div>
+      <div class="outstanding-list">
+        ${unpaidBills.map((b, idx) => {
+          const isOverdue = b.status === 'overdue';
+          return `<div class="outstanding-item${idx === 0 ? ' active' : ''}" id="out-item-${b.id}" onclick="selectBillForSlip('${b.id}')">
+            <div style="display:flex;flex-direction:column;gap:0.15rem">
+              <span class="out-period-label">${escapeHtml(b.period_label || '')}</span>
+              <span style="font-size:0.8rem;color:#6b7280">
+                ${b.rent_amount ? 'ค่าเช่า ' + formatMoney(b.rent_amount) + ' + ' : ''}น้ำ ${formatMoney(b.water_amount)} + ไฟ ${formatMoney(b.electric_amount)}${b.common_fee ? ' + ส่วนกลาง ' + formatMoney(b.common_fee) : ''}
+              </span>
+            </div>
+            <div style="display:flex;align-items:center;gap:0.5rem">
+              <span class="out-amount">฿${formatMoney(b.total_amount)}</span>
+              <span class="out-badge ${isOverdue ? 'overdue' : 'select'}">${isOverdue ? '⚠️ ค้างชำระ' : 'ชำระได้'}</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Edit mode banner
+  let editBannerHTML = '';
+  if (pendingPayment) {
+    editBannerHTML = `
+    <div class="slip-edit-banner">
+      <div style="font-weight:700;color:#b45309;margin-bottom:0.4rem">✏️ คุณมีสลิปที่รอตรวจสอบอยู่</div>
+      <div style="font-size:0.9rem;color:#92400e">บิล ${escapeHtml(pendingPayment.bill_id)} — ยอด ${formatMoney(pendingPayment.amount)} บาท</div>
+      <button class="btn btn-sm" style="margin-top:0.5rem;background:transparent;border:1px solid #d97706;color:#92400e" onclick="cancelSlipFromDashboard('${pendingPayment.id}')">🗑️ ยกเลิกสลิปที่ส่งไว้</button>
+    </div>`;
+  }
+
+  // Select first unpaid bill by default
+  const defaultBill = unpaidBills[0] || null;
 
   el.innerHTML = `
-    <div class="page-header"><h1>🧾 ส่งสลิป</h1></div>
-    ${unpaid.length ? `
-    <div style="display:grid;gap:1.5rem;max-width:600px">
-      ${unpaid.map(b => {
-        const borderColor = b.status === 'overdue' ? 'var(--danger)' : 'var(--warning)';
-        return `
-        <div class="card" style="border-left:4px solid ${borderColor}">
-          <div class="card-header" style="margin-bottom:1rem">
-            <h3 class="card-title" style="margin:0">${THAI_MONTHS[(parseInt(b.period_label?.split('/')[1])||1)-1] || ''} ${b.period_label?.split('/')[0] || ''}</h3>
-            ${renderBadge(b.status, STATUS_BILL)}
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;font-size:.9rem;margin-bottom:1rem">
-            <div style="background:#F8FAFC;padding:.5rem .75rem;border-radius:6px">ค่าเช่า: <strong>${formatMoney(b.rent_amount)}</strong></div>
-            <div style="background:#F0FDFF;padding:.5rem .75rem;border-radius:6px">ค่าน้ำ: <strong>${formatMoney(b.water_amount)}</strong></div>
-            <div style="background:#FFFBEB;padding:.5rem .75rem;border-radius:6px">ค่าไฟ: <strong>${formatMoney(b.electric_amount)}</strong></div>
-            <div style="background:#F0FDF4;padding:.5rem .75rem;border-radius:6px">ส่วนกลาง: <strong>${formatMoney(b.common_fee)}</strong></div>
-          </div>
-          <div style="text-align:center;padding:1rem;background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border-radius:10px;margin-bottom:1rem">
-            <div style="font-size:.85rem;color:var(--text-secondary)">ยอดรวมที่ต้องชำระ</div>
-            <div style="font-size:2em;font-weight:700;color:var(--primary)">${formatMoney(b.total_amount)} บาท</div>
-          </div>
-          ${b.due_date ? `<div style="font-size:.85rem;color:${b.status==='overdue'?'var(--danger)':'var(--text-light)'}">กำหนดชำระ: ${formatDate(b.due_date)}</div>` : ''}
-          <div style="margin-top:1rem;text-align:center">
-            <button class="btn btn-primary" onclick="showSlipUploadForm('${b.id}',${b.total_amount})" style="min-width:200px">📤 ส่งสลิปชำระเงิน</button>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>` : '<div class="card" style="text-align:center;padding:3rem;color:var(--text-light)">🎉 ไม่มียอดค้างชำระ</div>'}
+    <button class="slip-back-btn" onclick="location.hash='#/dashboard'">← กลับแดชบอร์ด</button>
+    <div class="slip-form-header"><h2>📤 ส่งสลิปชำระเงิน</h2></div>
 
-    <h3 style="margin-top:2rem">📋 ประวัติการชำระ</h3>
-    <div class="card">
-      ${renderTable([
-        { key: 'bill_id', label: 'บิล' },
-        { key: 'amount', label: 'ยอด', money: true },
-        { key: 'method', label: 'ช่องทาง', render: v => ({ cash: 'เงินสด', transfer: 'โอน', promptpay: 'PromptPay' }[v] || v) },
-        { key: 'paid_at', label: 'วันชำระ', date: true },
-        { key: 'status', label: 'สถานะ', badge: STATUS_PAYMENT }
-      ], payments, row => row.slip_photo_key ? `<button class="btn btn-sm btn-secondary" onclick="viewSlip('${row.slip_photo_key}')">ดูสลิป</button>` : '')}
-    </div>`;
+    ${editBannerHTML}
+    ${outstandingHTML}
+
+    ${defaultBill ? `
+    <div class="form-section">
+      <div class="form-section-title">🏪 ข้อมูลการชำระ</div>
+      <div class="form-group">
+        <label>ร้านค้า</label>
+        <div id="slip-stall-name" style="font-size:1.1rem;font-weight:700;color:var(--primary)">${escapeHtml(stallName)}</div>
+      </div>
+      <div class="form-group">
+        <label>ประจำเดือน</label>
+        <div id="slip-period" style="font-size:1rem;color:var(--text-primary)">${escapeHtml(defaultBill.period_label || '')}</div>
+      </div>
+      <div class="form-group">
+        <label>ยอดที่ต้องชำระ (บาท)</label>
+        <div id="slip-amount-display" style="font-size:1.3rem;font-weight:700;color:#e11d48">${formatMoney(defaultBill.total_amount)} บาท</div>
+        <div id="slip-breakdown" style="margin-top:0.4rem">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.85rem">
+            ${defaultBill.rent_amount ? `<div style="background:#F8FAFC;padding:.4rem .6rem;border-radius:6px">ค่าเช่า: <strong>${formatMoney(defaultBill.rent_amount)}</strong></div>` : ''}
+            <div style="background:#F0FDFF;padding:.4rem .6rem;border-radius:6px">ค่าน้ำ: <strong>${formatMoney(defaultBill.water_amount)}</strong></div>
+            <div style="background:#FFFBEB;padding:.4rem .6rem;border-radius:6px">ค่าไฟ: <strong>${formatMoney(defaultBill.electric_amount)}</strong></div>
+            ${defaultBill.common_fee ? `<div style="background:#F0FDF4;padding:.4rem .6rem;border-radius:6px">ส่วนกลาง: <strong>${formatMoney(defaultBill.common_fee)}</strong></div>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">💳 ข้อมูลสลิป</div>
+      <input type="hidden" id="slip-bill-id" value="${defaultBill.id}">
+      <div class="form-group">
+        <label>จำนวนเงินที่ชำระ (บาท) *</label>
+        <input type="number" class="form-input" id="slip-paid-amount" step="0.01" value="${defaultBill.total_amount}" required min="1">
+      </div>
+      <div class="form-group">
+        <label>ช่องทางชำระ *</label>
+        <select class="form-select" id="slip-method">
+          <option value="transfer">โอนเงิน</option>
+          <option value="promptpay">PromptPay</option>
+          <option value="cash">เงินสด</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>📷 แนบรูปสลิป (สูงสุด 3 รูป) *</label>
+        <input type="file" id="slip-file-input" accept="image/*" multiple style="display:none">
+        <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.5rem">
+          <button type="button" class="add-slip-btn" id="add-slip-btn" onclick="document.getElementById('slip-file-input').click()">📎 เพิ่มสลิป</button>
+          <span id="slip-count-label" style="font-size:0.85rem;color:var(--text-secondary)">ยังไม่ได้เลือกไฟล์</span>
+        </div>
+        <div id="slip-preview-container" style="display:flex;gap:0.5rem;flex-wrap:wrap"></div>
+      </div>
+      <div class="form-group">
+        <label>เลขอ้างอิง / หมายเหตุ</label>
+        <input type="text" class="form-input" id="slip-reference" placeholder="เช่น เลขที่รายการโอน">
+      </div>
+    </div>
+
+    <button class="slip-submit-btn" id="slip-submit-btn" onclick="doSubmitSlip()">📤 ยืนยันส่งสลิป</button>
+    ` : `
+    <div class="form-section" style="text-align:center;padding:3rem">
+      <div style="font-size:3rem;margin-bottom:1rem">🎉</div>
+      <div style="font-size:1.2rem;font-weight:700;color:var(--success)">ไม่มียอดค้างชำระ</div>
+      <div style="font-size:0.9rem;color:var(--text-secondary);margin-top:0.5rem">ทุกบิลได้รับการชำระแล้ว หรือรอตรวจสอบอยู่</div>
+    </div>`}
+  `;
+
+  // Setup file input handler
+  window._slipFiles = [];
+  const fileInput = document.getElementById('slip-file-input');
+  if (fileInput) {
+    fileInput.addEventListener('change', function(e) {
+      const newFiles = Array.from(e.target.files);
+      const remaining = 3 - window._slipFiles.length;
+      window._slipFiles = window._slipFiles.concat(newFiles.slice(0, remaining));
+      e.target.value = '';
+      renderSlipThumbs();
+    });
+  }
 }
 
-window.showSlipUploadForm = function(billId, amount) {
-  showModal(`
-    <div class="modal-header"><h2>📤 ส่งสลิปชำระเงิน</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
-    <form onsubmit="submitSlipUpload(event)">
-      <div class="modal-body">
-        <input type="hidden" name="bill_id" value="${billId}">
-        <div style="text-align:center;margin-bottom:1.5rem;padding:1rem;background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border-radius:10px">
-          <div style="font-size:.9rem;color:var(--text-light)">ยอดที่ต้องชำระ</div>
-          <div style="font-size:2em;font-weight:700;color:var(--primary)">${formatMoney(amount)} บาท</div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">จำนวนเงินที่ชำระ *</label>
-          <input class="form-input" type="number" step="0.01" name="amount" value="${amount}" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label">ช่องทาง *</label>
-          <select class="form-select" name="method" required>
-            <option value="transfer">โอนเงิน</option>
-            <option value="promptpay">PromptPay</option>
-            <option value="cash">เงินสด</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">📷 แนบสลิป *</label>
-          <input class="form-input" type="file" name="slip" accept="image/*" required onchange="previewSlipFile(this)">
-          <div id="slip-preview" style="margin-top:.5rem"></div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">เลขอ้างอิง / หมายเหตุ</label>
-          <input class="form-input" name="reference_no" placeholder="เช่น เลขที่รายการโอน">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-        <button type="submit" class="btn btn-primary">📤 ส่งสลิป</button>
-      </div>
-    </form>`, { large: true });
+function renderSlipThumbs() {
+  const container = document.getElementById('slip-preview-container');
+  const countLbl = document.getElementById('slip-count-label');
+  const addBtn = document.getElementById('add-slip-btn');
+  if (!container) return;
+  container.innerHTML = '';
+  if (window._slipFiles.length === 0) {
+    countLbl.textContent = 'ยังไม่ได้เลือกไฟล์';
+    addBtn.style.display = '';
+    return;
+  }
+  countLbl.textContent = window._slipFiles.length + ' ไฟล์' + (window._slipFiles.length >= 3 ? ' (เต็มแล้ว)' : '');
+  addBtn.style.display = window._slipFiles.length >= 3 ? 'none' : '';
+  window._slipFiles.forEach((file, idx) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'slip-thumb-wrap';
+    const img = document.createElement('img');
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button'; delBtn.className = 'slip-thumb-del'; delBtn.textContent = '×';
+    delBtn.onclick = () => { window._slipFiles.splice(idx, 1); renderSlipThumbs(); };
+    const reader = new FileReader();
+    reader.onload = e => { img.src = e.target.result; };
+    reader.readAsDataURL(file);
+    wrap.appendChild(img); wrap.appendChild(delBtn);
+    container.appendChild(wrap);
+  });
+}
+
+window.selectBillForSlip = function(billId) {
+  // Highlight selected outstanding item
+  document.querySelectorAll('.outstanding-item').forEach(el => el.classList.remove('active'));
+  const sel = document.getElementById('out-item-' + billId);
+  if (sel) sel.classList.add('active');
+  // Update form with selected bill data (re-fetch from page data)
+  const bills = document.querySelectorAll('.outstanding-item');
+  // We need to refetch - simplest: store bills in window
+  // Update bill_id
+  const billIdInput = document.getElementById('slip-bill-id');
+  if (billIdInput) billIdInput.value = billId;
+  // Trigger full reload for simplicity
+  callAPI('GET', '/billing/bills/' + billId).then(res => {
+    const b = res.data;
+    if (!b) return;
+    document.getElementById('slip-period').textContent = b.period_label || '';
+    document.getElementById('slip-amount-display').textContent = formatMoney(b.total_amount) + ' บาท';
+    document.getElementById('slip-paid-amount').value = b.total_amount;
+    const bd = document.getElementById('slip-breakdown');
+    if (bd) {
+      bd.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.85rem">
+        ${b.rent_amount ? `<div style="background:#F8FAFC;padding:.4rem .6rem;border-radius:6px">ค่าเช่า: <strong>${formatMoney(b.rent_amount)}</strong></div>` : ''}
+        <div style="background:#F0FDFF;padding:.4rem .6rem;border-radius:6px">ค่าน้ำ: <strong>${formatMoney(b.water_amount)}</strong></div>
+        <div style="background:#FFFBEB;padding:.4rem .6rem;border-radius:6px">ค่าไฟ: <strong>${formatMoney(b.electric_amount)}</strong></div>
+        ${b.common_fee ? `<div style="background:#F0FDF4;padding:.4rem .6rem;border-radius:6px">ส่วนกลาง: <strong>${formatMoney(b.common_fee)}</strong></div>` : ''}
+      </div>`;
+    }
+  });
 };
 
-window.previewSlipFile = function(input) {
-  const preview = document.getElementById('slip-preview');
-  if (!input.files[0]) { preview.innerHTML = ''; return; }
-  const url = URL.createObjectURL(input.files[0]);
-  preview.innerHTML = `<img src="${url}" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border)">`;
-};
+window.doSubmitSlip = async function() {
+  const billId = document.getElementById('slip-bill-id')?.value;
+  const amount = parseFloat(document.getElementById('slip-paid-amount')?.value) || 0;
+  const method = document.getElementById('slip-method')?.value || 'transfer';
+  const reference = document.getElementById('slip-reference')?.value || '';
+  const files = window._slipFiles || [];
 
-window.submitSlipUpload = async function(e) {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  const res = await callAPI('POST', '/payments', fd, true);
-  if (res.error) return toast(res.error, 'error');
-  toast('ส่งสลิปสำเร็จ รอตรวจสอบ', 'success');
-  closeModal();
-  pgUploadSlip();
+  if (!billId) return toast('ไม่พบข้อมูลบิล', 'error');
+  if (amount <= 0) return toast('กรุณากรอกจำนวนเงิน', 'warning');
+  if (files.length === 0) return toast('กรุณาแนบรูปสลิปอย่างน้อย 1 รูป', 'warning');
+  for (const f of files) {
+    if (f.size > 5 * 1024 * 1024) return toast('ไฟล์ ' + f.name + ' ใหญ่เกิน 5MB', 'error');
+  }
+
+  const btn = document.getElementById('slip-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'กำลังส่ง...';
+
+  try {
+    // Use first file for upload (API accepts single file via FormData)
+    const fd = new FormData();
+    fd.append('bill_id', billId);
+    fd.append('amount', amount);
+    fd.append('method', method);
+    fd.append('reference_no', reference);
+    fd.append('slip', files[0]);
+
+    const res = await callAPI('POST', '/payments', fd, true);
+    if (res.error) {
+      toast(res.error, 'error');
+      btn.disabled = false;
+      btn.textContent = '📤 ยืนยันส่งสลิป';
+      return;
+    }
+    toast('✅ ส่งสลิปสำเร็จ รอตรวจสอบ', 'success');
+    window._slipFiles = [];
+    location.hash = '#/dashboard';
+  } catch (err) {
+    toast('เกิดข้อผิดพลาด: ' + err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '📤 ยืนยันส่งสลิป';
+  }
 };
 
 // ═══════════════════════════════════════════════
