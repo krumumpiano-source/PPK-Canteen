@@ -680,8 +680,6 @@ async function pgBillingPeriods() {
     </div>`;
 }
 
-const THAI_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
-
 window.showBillingPeriodForm = async function(id) {
   let p = {};
   if (id) { const r = await callAPI('GET', '/billing/periods/' + id); p = r.data || {}; }
