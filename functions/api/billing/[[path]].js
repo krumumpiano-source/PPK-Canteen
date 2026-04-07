@@ -50,7 +50,7 @@ async function getPeriod(DB, id) {
 }
 
 async function createPeriod(DB, request, user) {
-  if (!['admin', 'billing_officer'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  if (!['admin', 'staff'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
   const body = await request.json();
   const year = parseInt(body.year);
   const month = parseInt(body.month);
@@ -69,7 +69,7 @@ async function createPeriod(DB, request, user) {
 }
 
 async function updatePeriod(DB, request, id, user) {
-  if (!['admin', 'billing_officer'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  if (!['admin', 'staff'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
   const body = await request.json();
   const fields = []; const vals = [];
   for (const key of ['water_rate', 'electric_rate', 'source_water_bill_no', 'source_electric_bill_no', 'status']) {
@@ -210,7 +210,7 @@ async function getBill(DB, id) {
 }
 
 async function issueBill(DB, id, user) {
-  if (!['admin', 'billing_officer'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  if (!['admin', 'staff'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
   await DB.prepare("UPDATE bills SET status = 'issued', issued_at = datetime('now') WHERE id = ? AND status = 'draft'").bind(id).run();
   await auditLog(DB, user.id, 'issue', 'bills', id, null);
 
@@ -231,7 +231,7 @@ async function issueBill(DB, id, user) {
 
 // ── Generate Bills ──
 async function generateBills(DB, request, user) {
-  if (!['admin', 'billing_officer'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  if (!['admin', 'staff'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
   const body = await request.json();
   const periodId = body.period_id;
 

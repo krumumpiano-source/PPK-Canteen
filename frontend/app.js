@@ -12,12 +12,12 @@ const APP_PAGES = {
   'users':            { render: pgUsers, roles: ['admin'] },
   'documents':        { render: pgDocuments, roles: ['admin'] },
   'biddings':         { render: pgBiddings, roles: ['admin'] },
-  'billing-periods':  { render: pgBillingPeriods, roles: ['admin','billing_officer'] },
-  'meter-read':       { render: pgMeterRead, roles: ['admin','billing_officer','meter_reader'] },
-  'meter-history':    { render: pgMeterHistory, roles: ['admin','billing_officer','meter_reader'] },
-  'bills':            { render: pgBills, roles: ['admin','billing_officer'] },
-  'payments':         { render: pgPayments, roles: ['admin','billing_officer','payment_verifier'] },
-  'receipts':         { render: pgReceipts, roles: ['admin','billing_officer','payment_verifier'] },
+  'billing-periods':  { render: pgBillingPeriods, roles: ['admin','staff'] },
+  'meter-read':       { render: pgMeterRead, roles: ['admin','staff'] },
+  'meter-history':    { render: pgMeterHistory, roles: ['admin','staff'] },
+  'bills':            { render: pgBills, roles: ['admin','staff'] },
+  'payments':         { render: pgPayments, roles: ['admin','staff'] },
+  'receipts':         { render: pgReceipts, roles: ['admin','staff'] },
   'inspections':      { render: pgInspections, roles: ['admin','inspector','executive'] },
   'penalties':        { render: pgPenalties, roles: ['admin','inspector'] },
   'menus-admin':      { render: pgMenusAdmin, roles: ['admin'] },
@@ -35,10 +35,10 @@ const APP_PAGES = {
   'my-menus':         { render: pgMyMenus, roles: ['stall_owner'] },
   'my-inspections':   { render: pgMyInspections, roles: ['stall_owner'] },
   // New HOME-PPK-style pages
-  'record-water':     { render: pgRecordWater, roles: ['admin','billing_officer','meter_reader'] },
-  'record-electric':  { render: pgRecordElectric, roles: ['admin','billing_officer','meter_reader'] },
-  'notify-bills':     { render: pgNotifyBills, roles: ['admin','billing_officer'] },
-  'check-slips':      { render: pgCheckSlips, roles: ['admin','billing_officer','payment_verifier'] },
+  'record-water':     { render: pgRecordWater, roles: ['admin','staff'] },
+  'record-electric':  { render: pgRecordElectric, roles: ['admin','staff'] },
+  'notify-bills':     { render: pgNotifyBills, roles: ['admin','staff'] },
+  'check-slips':      { render: pgCheckSlips, roles: ['admin','staff'] },
 };
 
 // ═══════════════════════════════════════════════

@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT,
   salt TEXT,
   name TEXT NOT NULL,
-  role TEXT NOT NULL CHECK(role IN ('admin','meter_reader','billing_officer','payment_verifier','inspector','executive','stall_owner')),
+  role TEXT NOT NULL CHECK(role IN ('admin','staff','inspector','executive','stall_owner')),
   stall_id TEXT,
   email TEXT,
   is_active INTEGER DEFAULT 1,
@@ -112,14 +112,6 @@ CREATE TABLE IF NOT EXISTS documents (
   file_name TEXT,
   expires_at TEXT,
   uploaded_at TEXT DEFAULT (datetime('now'))
-);
-
--- 8.1 files (binary storage in base64 for small attachments)
-CREATE TABLE IF NOT EXISTS files (
-  id TEXT PRIMARY KEY,
-  data TEXT NOT NULL,
-  content_type TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
 );
 
 -- 9. billing_periods

@@ -89,29 +89,16 @@ function getMenusForRole(role) {
     m.push({ path: 'settings', label: 'ตั้งค่า', icon: '⚙️', desc: 'ตั้งค่าระบบ' });
   }
 
-  if (role === 'meter_reader') {
-    m.push({ section: 'จดมิเตอร์' });
-    m.push({ path: 'record-water', label: 'บันทึกค่าน้ำ', icon: '💧', desc: 'จดมิเตอร์น้ำรายเดือน' });
-    m.push({ path: 'record-electric', label: 'บันทึกค่าไฟ', icon: '⚡', desc: 'จดมิเตอร์ไฟรายเดือน' });
-  }
-
-  if (role === 'billing_officer') {
+  if (role === 'staff') {
     m.push({ section: 'การเงิน' });
     m.push({ path: 'billing-periods', label: 'รอบบิล', icon: '📅', desc: 'สร้างและจัดการรอบบิล' });
-    m.push({ path: 'record-water', label: 'บันทึกค่าน้ำ', icon: '💧', desc: 'จดมิเตอร์น้ำ' });
-    m.push({ path: 'record-electric', label: 'บันทึกค่าไฟ', icon: '⚡', desc: 'จดมิเตอร์ไฟ' });
+    m.push({ path: 'record-water', label: 'บันทึกค่าน้ำ', icon: '💧', desc: 'จดมิเตอร์น้ำรายเดือน' });
+    m.push({ path: 'record-electric', label: 'บันทึกค่าไฟ', icon: '⚡', desc: 'จดมิเตอร์ไฟรายเดือน' });
     m.push({ path: 'bills', label: 'ใบแจ้งหนี้', icon: '💰', desc: 'รายการบิลทั้งหมด' });
-    m.push({ path: 'notify-bills', label: 'แจ้งยอดชำระ', icon: '📢', desc: 'ส่งใบแจ้งหนี้' });
-    m.push({ path: 'payments', label: 'การชำระเงิน', icon: '💳', desc: 'ประวัติชำระ' });
-    m.push({ path: 'check-slips', label: 'ตรวจสลิป', icon: '🔍', desc: 'ตรวจสอบสลิป' });
-    m.push({ path: 'receipts', label: 'ใบเสร็จ', icon: '🧾', desc: 'ออกใบเสร็จรับเงิน' });
-  }
-
-  if (role === 'payment_verifier') {
-    m.push({ section: 'ตรวจสอบ' });
+    m.push({ path: 'notify-bills', label: 'แจ้งยอดชำระ', icon: '📢', desc: 'ส่งใบแจ้งหนี้ให้ผู้เช่า' });
     m.push({ path: 'check-slips', label: 'ตรวจสลิป', icon: '🔍', desc: 'ตรวจสอบสลิปการชำระ' });
-    m.push({ path: 'payments', label: 'การชำระเงิน', icon: '💳', desc: 'ประวัติชำระ' });
-    m.push({ path: 'receipts', label: 'ใบเสร็จ', icon: '🧾', desc: 'ใบเสร็จทั้งหมด' });
+    m.push({ path: 'payments', label: 'การชำระเงิน', icon: '💳', desc: 'ประวัติชำระทั้งหมด' });
+    m.push({ path: 'receipts', label: 'ใบเสร็จ', icon: '🧾', desc: 'ออกใบเสร็จรับเงิน' });
   }
 
   if (role === 'inspector') {

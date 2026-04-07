@@ -26,7 +26,7 @@ async function listDocuments(DB, request) {
 }
 
 async function uploadDocument(DB, request, user) {
-  if (!['admin', 'billing_officer'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  if (!['admin', 'staff'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
   const form = await request.formData();
   const file = form.get('file');

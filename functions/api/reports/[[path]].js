@@ -5,7 +5,7 @@ export async function onRequest(context) {
   const { DB } = context.env;
   const user = context.data.user;
 
-  if (!['admin', 'executive', 'billing_officer'].includes(user.role)) {
+  if (!['admin', 'executive', 'staff'].includes(user.role)) {
     return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
 

@@ -61,7 +61,7 @@ async function getReceipt(DB, id, user) {
 }
 
 async function cancelReceipt(DB, id, request, user) {
-  if (!['admin', 'billing_officer'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  if (!['admin', 'staff'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
   const receipt = await DB.prepare('SELECT r.*, p.bill_id FROM receipts r LEFT JOIN payments p ON r.payment_id = p.id WHERE r.id = ?').bind(id).first();
   if (!receipt) return Response.json({ error: 'Not found' }, { status: 404 });

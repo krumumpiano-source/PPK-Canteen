@@ -85,7 +85,7 @@ async function createPayment(DB, context, user) {
 }
 
 async function verifyPayment(DB, request, id, user) {
-  if (!['admin', 'billing_officer', 'payment_verifier'].includes(user.role)) {
+  if (!['admin', 'staff'].includes(user.role)) {
     return Response.json({ error: 'Forbidden' }, { status: 403 });
   }
 

@@ -1,4 +1,4 @@
-/* =============================================
+﻿/* =============================================
    PPK-Canteen — Common Utilities
    API helpers, Auth, Toast, Modal, Formatters
    ============================================= */
@@ -198,7 +198,7 @@ const STATUS_COMPLAINT = { open: { text: 'รอดำเนินการ', cl
 const STATUS_INSPECTION = { pass: { text: 'ผ่าน', class: 'badge-success' }, warning: { text: 'เตือน', class: 'badge-warning' }, fail: { text: 'ไม่ผ่าน', class: 'badge-danger' } };
 const STATUS_PENALTY = { warning: { text: 'เตือน', class: 'badge-warning' }, fine: { text: 'ปรับ', class: 'badge-danger' }, suspension: { text: 'ระงับ', class: 'badge-danger' }, termination: { text: 'ยกเลิกสัญญา', class: 'badge-danger' } };
 const STATUS_PRICE = { pending: { text: 'รออนุมัติ', class: 'badge-warning' }, approved: { text: 'อนุมัติ', class: 'badge-success' }, rejected: { text: 'ปฏิเสธ', class: 'badge-danger' }, auto_rejected: { text: 'เกินเพดาน', class: 'badge-danger' } };
-const ROLE_NAMES = { admin: 'ผู้ดูแลระบบ', meter_reader: 'ผู้จดมิเตอร์', billing_officer: 'เจ้าหน้าที่บิล', payment_verifier: 'ผู้ตรวจสอบชำระ', inspector: 'ผู้ตรวจสุขอนามัย', executive: 'ผู้บริหาร', stall_owner: 'เจ้าของร้าน' };
+const ROLE_NAMES = { admin: 'ผู้ดูแลระบบ', staff: 'เจ้าหน้าที่', inspector: 'ผู้ตรวจสุขอนามัย', executive: 'ผู้บริหาร', stall_owner: 'เจ้าของร้าน' };
 
 const THAI_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
 
