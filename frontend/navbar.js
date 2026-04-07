@@ -5,10 +5,32 @@
 'use strict';
 
 function renderNavbar(user) {
+  const realRole = user.real_role || user.role;
   const role = user.role;
   const menus = getMenusForRole(role);
   const displayName = escapeHtml(user.name || 'ผู้ใช้');
   const roleLabel = ROLE_NAMES[role] || role;
+  const isViewingAs = realRole === 'admin' && role !== 'admin';
+
+  // Role switcher (admin only)
+  let switcherHTML = '';
+  if (realRole === 'admin') {
+    const viewAs = sessionStorage.getItem('ppk_view_as') || 'admin';
+    const roleOpts = Object.entries(ROLE_NAMES).map(([k, v]) =>
+      `<option value="${k}" ${viewAs === k ? 'selected' : ''}>${v}</option>`
+    ).join('');
+    switcherHTML = `
+      <div class="role-switcher">
+        <label class="role-switcher-label">🔄 ดูในมุมมอง:</label>
+        <select class="role-switcher-select" onchange="switchViewRole(this.value)">${roleOpts}</select>
+      </div>`;
+  }
+
+  // Viewing-as banner
+  let bannerHTML = '';
+  if (isViewingAs) {
+    bannerHTML = `<div class="view-as-banner" onclick="switchViewRole('admin')">👁️ กำลังดูในมุมมอง <strong>${roleLabel}</strong> — กดเพื่อกลับแอดมิน</div>`;
+  }
 
   const menuHTML = menus.map(item => {
     if ('section' in item) {
@@ -34,9 +56,10 @@ function renderNavbar(user) {
         <div class="sidebar-avatar">👤</div>
         <div style="min-width:0">
           <div class="sidebar-user-name">${displayName}</div>
-          <div class="sidebar-user-role">${roleLabel}</div>
+          <div class="sidebar-user-role">${roleLabel}${isViewingAs ? ' (จำลอง)' : ''}</div>
         </div>
       </div>
+      ${switcherHTML}
       <nav class="sidebar-nav">${menuHTML}</nav>
       <div class="sidebar-bottom">
         <button class="nav-logout" onclick="logout()">🚪 ออกจากระบบ</button>
@@ -49,6 +72,7 @@ function renderNavbar(user) {
       <span class="topbar-title">🍽️ โรงอาหาร PPK</span>
       <button class="hamburger" onclick="location.hash='#/notifications'" style="font-size:1.2rem;flex-direction:row">🔔</button>
     </header>
+    ${bannerHTML}
     <div class="overlay" id="overlay" onclick="closeSidebar()"></div>`;
 
   return topbarHTML + sidebarHTML;
@@ -158,3 +182,22 @@ function closeSidebar() {
 
 // Close on Escape
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSidebar(); });
+
+// ── Admin Role Switcher ──
+function switchViewRole(role) {
+  const user = getCurrentUser();
+  if (!user || (user.real_role || user.role) !== 'admin') return;
+  if (role === 'admin') {
+    sessionStorage.removeItem('ppk_view_as');
+  } else {
+    sessionStorage.setItem('ppk_view_as', role);
+  }
+  // Clear cached user so getCurrentUser re-reads with new role
+  _currentUser = null;
+  const freshUser = getCurrentUser();
+  // Re-render navbar + navigate to dashboard
+  document.getElementById('app').innerHTML = renderNavbar(freshUser);
+  closeSidebar();
+  location.hash = '#/dashboard';
+  toast(`สลับมุมมอง: ${ROLE_NAMES[role] || role}`, 'info');
+}

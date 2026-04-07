@@ -30,12 +30,26 @@ let _currentUser = null;
 function getCurrentUser() {
   if (_currentUser) return _currentUser;
   try { _currentUser = JSON.parse(localStorage.getItem('currentUser')); } catch {}
+  // Admin role-switch override (frontend only)
+  if (_currentUser && _currentUser.real_role === 'admin') {
+    const viewAs = sessionStorage.getItem('ppk_view_as');
+    if (viewAs && viewAs !== 'admin') {
+      _currentUser.role = viewAs;
+    } else {
+      _currentUser.role = 'admin';
+    }
+  }
   return _currentUser;
 }
 function setCurrentUser(u) {
-  _currentUser = u;
-  if (u) localStorage.setItem('currentUser', JSON.stringify(u));
-  else localStorage.removeItem('currentUser');
+  _currentUser = null; // clear cache so getCurrentUser re-reads
+  if (u) {
+    if (!u.real_role) u.real_role = u.role; // preserve original role
+    localStorage.setItem('currentUser', JSON.stringify(u));
+  } else {
+    localStorage.removeItem('currentUser');
+    sessionStorage.removeItem('ppk_view_as');
+  }
 }
 async function checkAuth() {
   const res = await callAPI('GET', '/auth/me');
