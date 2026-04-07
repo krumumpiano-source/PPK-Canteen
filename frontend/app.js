@@ -1628,7 +1628,7 @@ async function pgRecordWater() {
         <div style="font-size:3rem;margin-bottom:1rem">💧</div>
         <h3>ไม่มีรอบบิลที่เปิดอยู่</h3>
         <p style="color:var(--text-secondary)">กรุณาสร้างรอบบิลใหม่ก่อน หรือเปิดรอบบิลที่ปิดไปแล้ว</p>
-        <a href="#/billing" class="btn btn-primary" style="margin-top:1rem">📋 ไปหน้าจัดการรอบบิล</a>
+        <a href="#/billing-periods" class="btn btn-primary" style="margin-top:1rem">📋 ไปหน้าจัดการรอบบิล</a>
       </div>`;
     return;
   }
@@ -1737,7 +1737,7 @@ async function pgRecordElectric() {
         <div style="font-size:3rem;margin-bottom:1rem">⚡</div>
         <h3>ไม่มีรอบบิลที่เปิดอยู่</h3>
         <p style="color:var(--text-secondary)">กรุณาสร้างรอบบิลใหม่ก่อน หรือเปิดรอบบิลที่ปิดไปแล้ว</p>
-        <a href="#/billing" class="btn btn-primary" style="margin-top:1rem">📋 ไปหน้าจัดการรอบบิล</a>
+        <a href="#/billing-periods" class="btn btn-primary" style="margin-top:1rem">📋 ไปหน้าจัดการรอบบิล</a>
       </div>`;
     return;
   }
