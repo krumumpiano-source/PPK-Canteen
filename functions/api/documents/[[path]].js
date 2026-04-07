@@ -1,5 +1,12 @@
-/* PPK-Canteen — Documents API (D1 file storage) */
+﻿/* PPK-Canteen — Documents API (D1 file storage) */
 import { auditLog } from '../_middleware.js';
+
+function arrayBufferToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
 
 export async function onRequest(context) {
   const path = context.params.path || [];
@@ -41,7 +48,7 @@ async function uploadDocument(DB, request, user) {
 
   // Store file in D1 files table as base64
   const fileId = 'F-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+  const base64 = arrayBufferToBase64(buf);
   await DB.prepare("INSERT INTO files (id, data, content_type) VALUES (?, ?, ?)").bind(fileId, base64, file.type || 'application/octet-stream').run();
 
   await DB.prepare(

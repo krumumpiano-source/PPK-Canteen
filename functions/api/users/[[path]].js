@@ -45,7 +45,9 @@ async function createUser(DB, request, user) {
   if (exists) return Response.json({ error: 'เบอร์โทรนี้ถูกใช้แล้ว' }, { status: 400 });
 
   const id = 'USR-' + Date.now().toString(36).toUpperCase();
-  const setupToken = Math.random().toString(36).slice(2, 10).toUpperCase();
+  const arr = new Uint8Array(5);
+  crypto.getRandomValues(arr);
+  const setupToken = Array.from(arr, b => b.toString(36)).join('').toUpperCase().slice(0, 8);
 
   await DB.prepare(
     'INSERT INTO users (id, phone, name, role, stall_id, email, is_active, setup_token) VALUES (?,?,?,?,?,?,1,?)'
@@ -66,7 +68,15 @@ async function updateUser(DB, request, id, user) {
   const allowedFields = user.role === 'admin' ? [...adminFields, ...selfFields] : selfFields;
 
   for (const key of allowedFields) {
-    if (body[key] !== undefined) { fields.push(`${key} = ?`); vals.push(body[key]); }
+    if (body[key] !== undefined) {
+      let val = body[key];
+      if (key === 'phone') {
+        val = String(val).replace(/\D/g, '');
+        const dup = await DB.prepare('SELECT id FROM users WHERE phone = ? AND id != ?').bind(val, id).first();
+        if (dup) return Response.json({ error: 'เบอร์โทรนี้ถูกใช้แล้ว' }, { status: 400 });
+      }
+      fields.push(`${key} = ?`); vals.push(val);
+    }
   }
 
   if (!fields.length) return Response.json({ error: 'ไม่มีข้อมูล' }, { status: 400 });

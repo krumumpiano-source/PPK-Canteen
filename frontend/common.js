@@ -70,7 +70,7 @@ function toast(message, type = 'info', duration = 3500) {
   const t = document.createElement('div');
   const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
   t.className = `toast toast-${type}`;
-  t.innerHTML = `<span>${icons[type] || ''}</span><span>${message}</span>`;
+  t.innerHTML = `<span>${icons[type] || ''}</span><span>${escapeHtml(message)}</span>`;
   c.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(100%)'; setTimeout(() => t.remove(), 300); }, duration);
 }
@@ -99,8 +99,8 @@ async function confirmDialog(message, opts = {}) {
   return new Promise(resolve => {
     const id = 'confirm-' + Date.now();
     showModal(`
-      <div class="modal-header"><h2>${opts.title || 'ยืนยัน'}</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
-      <div class="modal-body"><p>${message}</p></div>
+      <div class="modal-header"><h2>${escapeHtml(opts.title || 'ยืนยัน')}</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
+      <div class="modal-body"><p>${escapeHtml(message)}</p></div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal(); window._confirmResolve(false)">ยกเลิก</button>
         <button class="btn ${opts.danger ? 'btn-danger' : 'btn-primary'}" onclick="closeModal(); window._confirmResolve(true)">${opts.okText || 'ยืนยัน'}</button>
@@ -113,8 +113,8 @@ async function alertDialog(message, opts = {}) {
   return new Promise(resolve => {
     const types = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
     showModal(`
-      <div class="modal-header"><h2>${opts.title || (types[opts.type] || '') + ' แจ้งเตือน'}</h2></div>
-      <div class="modal-body"><p>${message}</p></div>
+      <div class="modal-header"><h2>${escapeHtml(opts.title || (types[opts.type] || '') + ' แจ้งเตือน')}</h2></div>
+      <div class="modal-body"><p>${escapeHtml(message)}</p></div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="closeModal(); window._alertResolve()">ตกลง</button>
       </div>`, { persistent: true });

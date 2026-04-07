@@ -47,6 +47,7 @@ async function getMenu(DB, id) {
 }
 
 async function createMenu(DB, request, user) {
+  if (!['admin', 'stall_owner'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
   const body = await request.json();
   if (!body.name || !body.price) return Response.json({ error: 'กรุณากรอกชื่อและราคา' }, { status: 400 });
 
@@ -79,6 +80,7 @@ async function createMenu(DB, request, user) {
 }
 
 async function updateMenu(DB, request, id, user) {
+  if (!['admin', 'stall_owner'].includes(user.role)) return Response.json({ error: 'Forbidden' }, { status: 403 });
   const body = await request.json();
   const fields = []; const vals = [];
   for (const key of ['name', 'price', 'category', 'is_available']) {

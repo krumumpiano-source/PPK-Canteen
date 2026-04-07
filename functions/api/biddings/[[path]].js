@@ -86,7 +86,7 @@ async function submitApplication(DB, context, biddingId) {
   const bidding = await DB.prepare("SELECT * FROM biddings WHERE id = ? AND status = 'open'").bind(biddingId).first();
   if (!bidding) return Response.json({ error: 'การประมูลไม่เปิดรับสมัคร' }, { status: 400 });
 
-  if (bidding.min_price && body.bid_price < bidding.min_price) {
+  if (bidding.min_price && Number(body.bid_price) < Number(bidding.min_price)) {
     return Response.json({ error: `ราคาเสนอต้องไม่น้อยกว่า ${bidding.min_price} บาท` }, { status: 400 });
   }
 

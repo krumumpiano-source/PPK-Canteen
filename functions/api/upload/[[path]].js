@@ -1,5 +1,12 @@
 ﻿/* PPK-Canteen — Upload / File Serving (D1) / OCR API */
 
+function arrayBufferToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
 export async function onRequest(context) {
   const path = context.params.path || [];
   const method = context.request.method;
@@ -34,7 +41,7 @@ async function ocrMeter(AI, request) {
     if (!file) return Response.json({ error: 'ไม่พบรูปภาพ' }, { status: 400 });
 
     const buf = await file.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+    const base64 = arrayBufferToBase64(buf);
 
     const result = await AI.run('@cf/meta/llama-3.2-11b-vision-instruct', {
       messages: [
