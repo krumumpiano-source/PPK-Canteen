@@ -1621,6 +1621,18 @@ async function pgRecordWater() {
   const selectedPeriod = params.get('period') || (periods[0]?.id || '');
   const periodOpts = periods.map(p => `<option value="${p.id}" ${p.id===selectedPeriod?'selected':''}>${THAI_MONTHS[(p.month||1)-1]} ${p.year}</option>`).join('');
 
+  if (!periods.length) {
+    el.innerHTML = `
+      <div class="page-header"><h1>บันทึกค่าน้ำ</h1></div>
+      <div class="card" style="text-align:center;padding:3rem">
+        <div style="font-size:3rem;margin-bottom:1rem">💧</div>
+        <h3>ไม่มีรอบบิลที่เปิดอยู่</h3>
+        <p style="color:var(--text-secondary)">กรุณาสร้างรอบบิลใหม่ก่อน หรือเปิดรอบบิลที่ปิดไปแล้ว</p>
+        <a href="#/billing" class="btn btn-primary" style="margin-top:1rem">📋 ไปหน้าจัดการรอบบิล</a>
+      </div>`;
+    return;
+  }
+
   el.innerHTML = `
     <div class="page-header"><h1>บันทึกค่าน้ำ</h1></div>
     <div class="card">
@@ -1629,7 +1641,7 @@ async function pgRecordWater() {
         <select class="form-select" id="rw-period" onchange="loadRecordWater(this.value)" style="max-width:250px">${periodOpts}</select>
       </div>
       <div id="rw-container"><div class="loading">กำลังโหลด...</div></div>
-      <div id="rw-summary" style="display:none;margin-top:1rem;padding:1rem;background:#F0FDF4;border-radius:var(--radius-sm);display:flex;gap:2rem;flex-wrap:wrap;font-size:.95rem">
+      <div id="rw-summary" style="display:none;margin-top:1rem;padding:1rem;background:#F0FDF4;border-radius:var(--radius-sm);gap:2rem;flex-wrap:wrap;font-size:.95rem">
         <span>📊 กรอกแล้ว: <strong id="rw-cnt">0</strong> ร้าน</span>
         <span>💧 รวมหน่วย: <strong id="rw-units">0</strong></span>
         <span>💰 รวมเงิน: <strong id="rw-amt">0</strong> บาท</span>
@@ -1718,6 +1730,18 @@ async function pgRecordElectric() {
   const selectedPeriod = params.get('period') || (periods[0]?.id || '');
   const periodOpts = periods.map(p => `<option value="${p.id}" ${p.id===selectedPeriod?'selected':''}>${THAI_MONTHS[(p.month||1)-1]} ${p.year}</option>`).join('');
 
+  if (!periods.length) {
+    el.innerHTML = `
+      <div class="page-header"><h1>บันทึกค่าไฟ</h1></div>
+      <div class="card" style="text-align:center;padding:3rem">
+        <div style="font-size:3rem;margin-bottom:1rem">⚡</div>
+        <h3>ไม่มีรอบบิลที่เปิดอยู่</h3>
+        <p style="color:var(--text-secondary)">กรุณาสร้างรอบบิลใหม่ก่อน หรือเปิดรอบบิลที่ปิดไปแล้ว</p>
+        <a href="#/billing" class="btn btn-primary" style="margin-top:1rem">📋 ไปหน้าจัดการรอบบิล</a>
+      </div>`;
+    return;
+  }
+
   el.innerHTML = `
     <div class="page-header"><h1>บันทึกค่าไฟ</h1></div>
     <div class="card">
@@ -1726,7 +1750,7 @@ async function pgRecordElectric() {
         <select class="form-select" id="re-period" onchange="loadRecordElectric(this.value)" style="max-width:250px">${periodOpts}</select>
       </div>
       <div id="re-container"><div class="loading">กำลังโหลด...</div></div>
-      <div id="re-summary" style="display:none;margin-top:1rem;padding:1rem;background:#FFFBEB;border-radius:var(--radius-sm);display:flex;gap:2rem;flex-wrap:wrap;font-size:.95rem">
+      <div id="re-summary" style="display:none;margin-top:1rem;padding:1rem;background:#FFFBEB;border-radius:var(--radius-sm);gap:2rem;flex-wrap:wrap;font-size:.95rem">
         <span>📊 กรอกแล้ว: <strong id="re-cnt">0</strong> ร้าน</span>
         <span>⚡ รวมหน่วย: <strong id="re-units">0</strong></span>
         <span>💰 รวมเงิน: <strong id="re-amt">0</strong> บาท</span>
