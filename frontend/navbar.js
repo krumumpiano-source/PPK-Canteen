@@ -94,7 +94,6 @@ function getMenusForRole(role) {
     m.push({ section: 'ประมูล' });
     m.push({ path: 'biddings', label: 'จัดการประมูล', icon: '🔨', desc: 'เปิด/ปิดประมูลแผง' });
     m.push({ section: 'การเงิน' });
-    m.push({ path: 'billing-periods', label: 'รอบบิล', icon: '📅', desc: 'สร้างและจัดการรอบบิล' });
     m.push({ path: 'record-water', label: 'บันทึกค่าน้ำ', icon: '💧', desc: 'จดมิเตอร์น้ำรายเดือน' });
     m.push({ path: 'record-electric', label: 'บันทึกค่าไฟ', icon: '⚡', desc: 'จดมิเตอร์ไฟรายเดือน' });
     m.push({ path: 'notify-bills', label: 'แจ้งยอดชำระ', icon: '📢', desc: 'ส่งใบแจ้งหนี้ให้ผู้เช่า' });
@@ -115,7 +114,6 @@ function getMenusForRole(role) {
 
   if (role === 'staff') {
     m.push({ section: 'การเงิน' });
-    m.push({ path: 'billing-periods', label: 'รอบบิล', icon: '📅', desc: 'สร้างและจัดการรอบบิล' });
     m.push({ path: 'record-water', label: 'บันทึกค่าน้ำ', icon: '💧', desc: 'จดมิเตอร์น้ำรายเดือน' });
     m.push({ path: 'record-electric', label: 'บันทึกค่าไฟ', icon: '⚡', desc: 'จดมิเตอร์ไฟรายเดือน' });
     m.push({ path: 'bills', label: 'ใบแจ้งหนี้', icon: '💰', desc: 'รายการบิลทั้งหมด' });
