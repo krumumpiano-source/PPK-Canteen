@@ -1,6 +1,13 @@
 ﻿/* PPK-Canteen — Billing API (Periods + Readings + Bills + Generate) */
 import { auditLog } from '../_middleware.js';
 
+function arrayBufferToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
 export async function onRequest(context) {
   const path = context.params.path || [];
   const method = context.request.method;
@@ -119,7 +126,7 @@ async function createReading(DB, context, user) {
     if (photo && photo.size > 0) {
       const fileId = 'F-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
       const buf = await photo.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      const base64 = arrayBufferToBase64(buf);
       await DB.prepare("INSERT INTO files (id, data, content_type) VALUES (?, ?, ?)").bind(fileId, base64, photo.type || 'image/jpeg').run();
       body.photo_key = fileId;
     }
@@ -154,7 +161,7 @@ async function updateReading(DB, context, id, user) {
     if (photo && photo.size > 0) {
       const fileId = 'F-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
       const buf = await photo.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      const base64 = arrayBufferToBase64(buf);
       await DB.prepare("INSERT INTO files (id, data, content_type) VALUES (?, ?, ?)").bind(fileId, base64, photo.type || 'image/jpeg').run();
       body.photo_key = fileId;
     }

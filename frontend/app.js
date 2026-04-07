@@ -166,7 +166,7 @@ async function pgDashboardStallOwner(el, user) {
         <div class="card-header"><h3>เลือกร้านที่ต้องการดู</h3></div>
         <div style="padding:1rem">
           <select id="sim-stall" class="form-select" style="margin-bottom:1rem">
-            ${stalls.map(s => `<option value="${s.id}">${escapeHtml(s.name || s.zone + '-' + s.number)} ${s.tenant_name ? '(' + escapeHtml(s.tenant_name) + ')' : ''}</option>`).join('')}
+            ${stalls.map(s => `<option value="${s.id}">${escapeHtml(s.name || s.zone + '-' + s.number)} [${s.status}]</option>`).join('')}
           </select>
           <button class="btn btn-primary" onclick="simulateStallOwner()" style="width:100%">📊 ดูแดชบอร์ดร้านนี้</button>
         </div>
@@ -197,7 +197,7 @@ async function pgDashboardStallOwner(el, user) {
     if (billPayment) {
       paymentId = billPayment.id;
       if (billPayment.status === 'approved' || billPayment.status === 'verified') slipStatus = 'success';
-      else if (billPayment.status === 'rejected') { slipStatus = 'rejected'; reviewNote = billPayment.review_note || ''; }
+      else if (billPayment.status === 'rejected') { slipStatus = 'rejected'; reviewNote = billPayment.notes || ''; }
       else if (billPayment.status === 'pending') slipStatus = 'reviewing';
     }
   }
@@ -365,7 +365,7 @@ async function pgDashboardInspector(el, user) {
   // Count recent stats
   const thisMonth = new Date().toISOString().slice(0, 7);
   const monthInspections = inspections.filter(i => (i.inspection_date || i.created_at || '').startsWith(thisMonth));
-  const pendingPenalties = penalties.filter(p => p.status === 'pending' || p.status === 'issued');
+  const pendingPenalties = penalties.filter(p => p.status === 'active');
 
   el.innerHTML = `
     <div class="admin-stats">
