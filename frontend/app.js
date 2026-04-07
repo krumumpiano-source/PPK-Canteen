@@ -148,10 +148,36 @@ function buildAdminHubGrid(user) {
 }
 
 async function pgDashboardStallOwner(el, user) {
+  const realRole = user.real_role || user.role;
+  const isSimulating = realRole === 'admin' && user.role === 'stall_owner';
+
+  // If admin simulating stall_owner without stall_id, show stall picker
+  if (isSimulating && !user.stall_id) {
+    const stallsRes = await callAPI('GET', '/stalls');
+    const stalls = (stallsRes.data || []).filter(s => s.status === 'occupied');
+    if (!stalls.length) {
+      el.innerHTML = `<div class="card" style="text-align:center;padding:3rem;color:var(--text-light)">ยังไม่มีร้านค้าที่มีผู้เช่า</div>`;
+      return;
+    }
+    el.innerHTML = `
+      <div class="page-header"><h1>👁️ จำลองมุมมองเจ้าของร้าน</h1></div>
+      <div class="card" style="max-width:500px">
+        <div class="card-header"><h3>เลือกร้านที่ต้องการดู</h3></div>
+        <div style="padding:1rem">
+          <select id="sim-stall" class="form-select" style="margin-bottom:1rem">
+            ${stalls.map(s => `<option value="${s.id}">${escapeHtml(s.name || s.zone + '-' + s.number)} ${s.tenant_name ? '(' + escapeHtml(s.tenant_name) + ')' : ''}</option>`).join('')}
+          </select>
+          <button class="btn btn-primary" onclick="simulateStallOwner()" style="width:100%">📊 ดูแดชบอร์ดร้านนี้</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const stallId = user.stall_id;
   const [billsRes, contractRes, paymentsRes] = await Promise.all([
-    callAPI('GET', '/billing/bills?stall_id=' + user.stall_id + '&limit=10'),
-    callAPI('GET', '/contracts?stall_id=' + user.stall_id + '&status=active'),
-    callAPI('GET', '/payments?stall_id=' + user.stall_id + '&limit=5')
+    callAPI('GET', '/billing/bills?stall_id=' + stallId + '&limit=10'),
+    callAPI('GET', '/contracts?stall_id=' + stallId + '&status=active'),
+    callAPI('GET', '/payments?stall_id=' + stallId + '&limit=5')
   ]);
   const bills = billsRes.data || [];
   const contract = (contractRes.data || [])[0] || {};
@@ -1395,40 +1421,42 @@ async function pgSettings() {
 
   el.innerHTML = `
     <div class="page-header"><h1>ตั้งค่าระบบ</h1></div>
-    <form class="card" onsubmit="saveSettings(event)" style="padding:1.5rem">
-      <h3>ข้อมูลทั่วไป</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-        <div class="form-group"><label>ชื่อโรงเรียน</label><input name="school_name" value="${escapeHtml(s.school_name||'')}"></div>
-        <div class="form-group"><label>PromptPay ID</label><input name="promptpay_id" value="${escapeHtml(s.promptpay_id||'')}"></div>
+    <form class="card" onsubmit="saveSettings(event)">
+      <div class="card-header"><h3 class="card-title">⚙️ ข้อมูลทั่วไป</h3></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">ชื่อโรงเรียน</label><input class="form-input" name="school_name" value="${escapeHtml(s.school_name||'')}"></div>
+        <div class="form-group"><label class="form-label">PromptPay ID</label><input class="form-input" name="promptpay_id" value="${escapeHtml(s.promptpay_id||'')}" placeholder="เช่น 0-1234-56789-01-2"></div>
       </div>
-      <h3>อัตราค่าบริการ</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
-        <div class="form-group"><label>ค่าน้ำ/หน่วย (บาท)</label><input type="number" step="0.01" name="water_rate" value="${s.water_rate||18}"></div>
-        <div class="form-group"><label>ค่าไฟ/หน่วย (บาท)</label><input type="number" step="0.01" name="electric_rate" value="${s.electric_rate||8}"></div>
-        <div class="form-group"><label>ค่าส่วนกลาง (บาท)</label><input type="number" step="0.01" name="common_fee" value="${s.common_fee||500}"></div>
+      <h3 style="margin-top:1.5rem;margin-bottom:1rem;font-size:1rem;color:var(--gray-700)">💧⚡ อัตราค่าบริการ</h3>
+      <div class="form-row" style="grid-template-columns:repeat(3,1fr)">
+        <div class="form-group"><label class="form-label">ค่าน้ำ/หน่วย (บาท)</label><input class="form-input" type="number" step="0.01" name="water_rate" value="${s.water_rate||18}"></div>
+        <div class="form-group"><label class="form-label">ค่าไฟ/หน่วย (บาท)</label><input class="form-input" type="number" step="0.01" name="electric_rate" value="${s.electric_rate||8}"></div>
+        <div class="form-group"><label class="form-label">ค่าส่วนกลาง (บาท)</label><input class="form-input" type="number" step="0.01" name="common_fee" value="${s.common_fee||500}"></div>
       </div>
-      <h3>การควบคุม</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-        <div class="form-group"><label>ราคาอาหารสูงสุด (บาท)</label><input type="number" name="max_food_price" value="${s.max_food_price||35}"></div>
-        <div class="form-group"><label>เก็บรูปภาพ (วัน)</label><input type="number" name="photo_retention_days" value="${s.photo_retention_days||90}"></div>
+      <h3 style="margin-top:1.5rem;margin-bottom:1rem;font-size:1rem;color:var(--gray-700)">📋 การควบคุม</h3>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">ราคาอาหารสูงสุด (บาท)</label><input class="form-input" type="number" name="max_food_price" value="${s.max_food_price||35}"></div>
+        <div class="form-group"><label class="form-label">เก็บรูปภาพ (วัน)</label><input class="form-input" type="number" name="photo_retention_days" value="${s.photo_retention_days||90}"></div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-        <div class="form-group"><label>เตือนสัญญาล่วงหน้า (วัน)</label><input type="number" name="contract_warning_days" value="${s.contract_warning_days||30}"></div>
-        <div class="form-group"><label>เตือนใบรับรองแพทย์ (วัน)</label><input type="number" name="health_cert_warning_days" value="${s.health_cert_warning_days||30}"></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">เตือนสัญญาล่วงหน้า (วัน)</label><input class="form-input" type="number" name="contract_warning_days" value="${s.contract_warning_days||30}"></div>
+        <div class="form-group"><label class="form-label">เตือนใบรับรองแพทย์ (วัน)</label><input class="form-input" type="number" name="health_cert_warning_days" value="${s.health_cert_warning_days||30}"></div>
       </div>
-      <div class="form-group"><label>เดือนเริ่มปีงบฯ</label><input type="number" name="fiscal_year_start_month" value="${s.fiscal_year_start_month||10}" min="1" max="12"></div>
-      <div style="margin-top:1.5rem"><button type="submit" class="btn btn-primary">💾 บันทึกตั้งค่า</button></div>
+      <div class="form-row" style="grid-template-columns:1fr 1fr">
+        <div class="form-group"><label class="form-label">เดือนเริ่มปีงบฯ</label><input class="form-input" type="number" name="fiscal_year_start_month" value="${s.fiscal_year_start_month||10}" min="1" max="12"></div>
+      </div>
+      <div class="form-actions" style="justify-content:flex-start"><button type="submit" class="btn btn-primary">💾 บันทึกตั้งค่า</button></div>
     </form>
 
-    <div class="card" style="margin-top:1rem;padding:1.5rem">
-      <h3>🔐 เปลี่ยนรหัสผ่าน</h3>
+    <div class="card" style="margin-top:1rem">
+      <div class="card-header"><h3 class="card-title">🔐 เปลี่ยนรหัสผ่าน</h3></div>
       <form onsubmit="changePassword(event)">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
-          <div class="form-group"><label>รหัสผ่านปัจจุบัน</label><input type="password" name="current_password" required></div>
-          <div class="form-group"><label>รหัสผ่านใหม่</label><input type="password" name="new_password" minlength="8" required></div>
-          <div class="form-group"><label>ยืนยันรหัสผ่านใหม่</label><input type="password" name="confirm_password" minlength="8" required></div>
+        <div class="form-row" style="grid-template-columns:repeat(3,1fr)">
+          <div class="form-group"><label class="form-label">รหัสผ่านปัจจุบัน</label><input class="form-input" type="password" name="current_password" required autocomplete="current-password"></div>
+          <div class="form-group"><label class="form-label">รหัสผ่านใหม่</label><input class="form-input" type="password" name="new_password" minlength="8" required autocomplete="new-password"></div>
+          <div class="form-group"><label class="form-label">ยืนยันรหัสผ่านใหม่</label><input class="form-input" type="password" name="confirm_password" minlength="8" required autocomplete="new-password"></div>
         </div>
-        <button type="submit" class="btn btn-secondary">เปลี่ยนรหัสผ่าน</button>
+        <div class="form-actions" style="justify-content:flex-start"><button type="submit" class="btn btn-secondary">เปลี่ยนรหัสผ่าน</button></div>
       </form>
     </div>`;
 }
