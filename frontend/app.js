@@ -1648,20 +1648,24 @@ async function pgRecordWater() {
   el.innerHTML = `
     <div class="page-header"><h1>💧 บันทึกค่าน้ำ</h1></div>
     <div class="card">
-      <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
-        <label class="form-label" style="margin:0">เดือน:</label>
-        <select class="form-select" id="rw-month" style="max-width:180px">${monthOpts}</select>
-        <label class="form-label" style="margin:0">ปี (พ.ศ.):</label>
-        <input type="number" class="form-input" id="rw-year" value="${curYear}" style="max-width:120px">
-        <button class="btn btn-primary" onclick="startRecordWater()">📋 โหลดข้อมูล</button>
+      <div style="background:#E0F7FA;border:1px solid #B2EBF2;border-radius:8px;padding:0.8rem 1rem;margin-bottom:1rem;color:#00838F;font-size:.9rem;display:flex;align-items:center;gap:.5rem">
+        ℹ️ กรอกเลขมิเตอร์น้ำของแต่ละร้านค้า ระบบจะคำนวณหน่วยใช้งานและยอดเงินโดยอัตโนมัติ
       </div>
-      <div id="rw-container"></div>
-      <div id="rw-summary" style="display:none;margin-top:1rem;padding:1rem;background:#F0FDF4;border-radius:var(--radius-sm);gap:2rem;flex-wrap:wrap;font-size:.95rem">
-        <span>📊 กรอกแล้ว: <strong id="rw-cnt">0</strong> ร้าน</span>
-        <span>💧 รวมหน่วย: <strong id="rw-units">0</strong></span>
-        <span>💰 รวมเงิน: <strong id="rw-amt">0</strong> บาท</span>
+      <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
+        <div class="form-group" style="margin:0;flex:1;min-width:140px">
+          <label class="form-label">เดือน</label>
+          <select class="form-select" id="rw-month" onchange="startRecordWater()">${monthOpts}</select>
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:100px">
+          <label class="form-label">ปี (พ.ศ.)</label>
+          <input type="number" class="form-input" id="rw-year" value="${curYear}" style="max-width:120px" onchange="startRecordWater()">
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:100px">
+          <label class="form-label">💧 อัตราค่าน้ำ (บาท/หน่วย)</label>
+          <input type="number" class="form-input" id="rw-rate" value="" step="0.5" min="0" readonly style="background:#F0FDFF;font-weight:700;color:#0E7490">
+        </div>
       </div>
-      <div id="rw-actions" style="display:none;margin-top:1rem"><button class="btn btn-primary" onclick="saveAllRecordWater()">💾 บันทึกทั้งหมด</button></div>
+      <div id="rw-container"><div class="loading">กำลังโหลด...</div></div>
     </div>`;
   startRecordWater();
 }
@@ -1671,84 +1675,163 @@ window.startRecordWater = async function() {
   const year = parseInt(document.getElementById('rw-year').value);
   if (!month || !year) return toast('กรุณาเลือกเดือนและปี', 'error');
   const container = document.getElementById('rw-container');
-  container.innerHTML = '<div class="loading">กำลังโหลด...</div>';
+  container.innerHTML = '<div class="loading">⏳ กำลังโหลดข้อมูล...</div>';
 
-  // ensure period exists (auto-create if needed)
   const ensureRes = await callAPI('POST', '/billing/periods/ensure', { year, month });
   if (ensureRes.error) return container.innerHTML = `<p style="color:var(--danger)">${escapeHtml(ensureRes.error)}</p>`;
   const period = ensureRes.data;
   window._rwPeriod = period.id;
 
-  loadRecordWater(period.id);
-};
+  // Show rate
+  const rateInput = document.getElementById('rw-rate');
+  if (rateInput) rateInput.value = period.water_rate || 18;
 
-window.loadRecordWater = async function(periodId) {
-  const [stallsRes, readingsRes, periodRes] = await Promise.all([
+  // Get prev period readings for auto-fill
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  const prevPeriodId = `BP-${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+
+  const [stallsRes, readingsRes, prevReadingsRes] = await Promise.all([
     callAPI('GET', '/stalls?status=occupied'),
-    callAPI('GET', '/billing/readings?period_id=' + periodId + '&type=water'),
-    callAPI('GET', '/billing/periods/' + periodId)
+    callAPI('GET', '/billing/readings?period_id=' + period.id + '&type=water'),
+    callAPI('GET', '/billing/readings?period_id=' + prevPeriodId + '&type=water')
   ]);
-  const stalls = stallsRes.data || [], readings = readingsRes.data || [], period = periodRes.data || {};
+  const stalls = stallsRes.data || [], readings = readingsRes.data || [];
+  const prevReadings = prevReadingsRes.data || [];
   const rMap = {}; readings.forEach(r => { rMap[r.stall_id] = r; });
+  const prevMap = {}; prevReadings.forEach(r => { prevMap[r.stall_id] = r; });
   const rate = period.water_rate || 18;
 
+  if (!stalls.length) {
+    container.innerHTML = '<p style="padding:2rem;text-align:center;color:var(--text-secondary)">ไม่มีร้านค้าที่มีผู้เช่า</p>';
+    return;
+  }
+
   const rows = stalls.map((s,i) => {
-    const r = rMap[s.id]; const prev = r?.prev_reading||0; const curr = r?.curr_reading||'';
-    const usage = curr !== '' ? (curr-prev) : 0; const amt = usage > 0 ? usage*rate : 0;
+    const r = rMap[s.id];
+    const prevR = prevMap[s.id];
+    // Auto-fill prev_reading from previous period's curr_reading
+    const prev = r ? (r.prev_reading || 0) : (prevR ? (prevR.curr_reading || 0) : 0);
+    const curr = r ? r.curr_reading : '';
+    const usage = curr !== '' && curr !== null ? Math.max(0, curr - prev) : 0;
+    const amt = usage > 0 ? usage * rate : 0;
     return `<tr data-sid="${s.id}" data-rid="${r?.id||''}" data-rate="${rate}">
-      <td>${i+1}</td><td>${escapeHtml(s.name)}</td><td>${s.zone||'-'}</td>
+      <td style="text-align:center">${i+1}</td>
+      <td>${escapeHtml(s.name)}</td>
+      <td>${escapeHtml(s.zone||'-')}</td>
       <td><input class="form-input rw-p" type="number" step="0.01" value="${prev}" style="width:100px" onchange="calcMeterRow(this,'rw')"></td>
-      <td><input class="form-input rw-c" type="number" step="0.01" value="${curr}" style="width:100px" onchange="calcMeterRow(this,'rw')"></td>
-      <td class="rw-u">${usage>0?usage.toFixed(2):'-'}</td>
-      <td class="rw-a">${amt>0?formatMoney(amt):'-'}</td>
+      <td><input class="form-input rw-c" type="number" step="0.01" value="${curr===null?'':curr}" placeholder="กรอกเลข" style="width:100px" onchange="calcMeterRow(this,'rw')"></td>
+      <td class="rw-u" style="text-align:right;font-weight:700;color:#0E7490">${usage>0?usage.toFixed(2):'-'}</td>
+      <td class="rw-a" style="text-align:right;font-weight:700;color:#059669">${amt>0?formatMoney(amt):'-'}</td>
       <td>${r?'<span class="badge badge-success">จดแล้ว</span>':'<span class="badge badge-warning">รอจด</span>'}</td>
     </tr>`;
   }).join('');
 
-  document.getElementById('rw-container').innerHTML = stalls.length ? `<div class="table-wrap"><table>
-    <thead><tr><th>#</th><th>ร้านค้า</th><th>โซน</th><th>มิเตอร์ก่อน</th><th>มิเตอร์ปัจจุบัน</th><th>หน่วยใช้</th><th>ยอดเงิน</th><th>สถานะ</th></tr></thead>
-    <tbody id="rw-body">${rows}</tbody></table></div>` : '<p style="padding:1rem;text-align:center;color:var(--text-secondary)">ไม่มีร้านค้าที่มีผู้เช่า</p>';
-  document.getElementById('rw-summary').style.display = stalls.length ? 'flex' : 'none';
-  document.getElementById('rw-actions').style.display = stalls.length ? 'block' : 'none';
-  updateMeterSummary('rw'); window._rwPeriod = periodId;
+  container.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem">
+      <strong style="color:#0E7490">📝 บันทึกเลขมิเตอร์</strong>
+      <input type="search" id="rw-search" placeholder="🔍 ค้นหาร้านค้า..." oninput="filterMeterTable('rw')" style="padding:.4rem .7rem;border:1px solid #d1d5db;border-radius:6px;font-size:13px;min-width:180px">
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>ร้านค้า</th><th>โซน</th><th>มิเตอร์ก่อน</th><th>มิเตอร์ปัจจุบัน</th><th>หน่วยใช้</th><th>ยอดเงิน (฿)</th><th>สถานะ</th></tr></thead>
+      <tbody id="rw-body">${rows}</tbody>
+    </table></div>
+    <div style="background:linear-gradient(135deg,#F0FDFF,#E0F7FA);border:2px solid #B2EBF2;border-radius:12px;padding:1.2rem;margin-top:1rem;display:flex;justify-content:space-around;flex-wrap:wrap;gap:1rem">
+      <div style="text-align:center"><div style="font-size:.9rem;color:#0E7490">จำนวนร้าน</div><div style="font-size:1.5rem;font-weight:700;color:#0E7490" id="rw-cnt">0</div></div>
+      <div style="text-align:center"><div style="font-size:.9rem;color:#0E7490">รวมหน่วยใช้</div><div style="font-size:1.5rem;font-weight:700;color:#0E7490" id="rw-units">0</div></div>
+      <div style="text-align:center"><div style="font-size:.9rem;color:#0E7490">รวมยอดเงิน</div><div style="font-size:1.5rem;font-weight:700;color:#0E7490" id="rw-amt">0</div></div>
+    </div>
+    <div style="display:flex;gap:1rem;justify-content:center;margin-top:1.5rem;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="saveAllRecordWater()" style="min-width:200px">💾 บันทึกข้อมูล</button>
+    </div>`;
+  updateMeterSummary('rw');
+};
+
+window.filterMeterTable = function(prefix) {
+  const q = (document.getElementById(prefix + '-search')?.value || '').trim().toLowerCase();
+  const rows = document.querySelectorAll('#' + prefix + '-body tr');
+  let shown = 0;
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    const match = !q || text.includes(q);
+    row.style.display = match ? '' : 'none';
+    if (match) shown++;
+  });
 };
 
 window.calcMeterRow = function(input, prefix) {
-  const tr = input.closest('tr'); const p = parseFloat(tr.querySelector('.'+prefix+'-p').value)||0;
-  const c = parseFloat(tr.querySelector('.'+prefix+'-c').value)||0; const rate = parseFloat(tr.dataset.rate);
-  const u = c>p?c-p:0; const a = u*rate;
-  tr.querySelector('.'+prefix+'-u').textContent = u>0?u.toFixed(2):'-';
-  tr.querySelector('.'+prefix+'-a').textContent = a>0?formatMoney(a):'-';
+  const tr = input.closest('tr');
+  const p = parseFloat(tr.querySelector('.' + prefix + '-p').value) || 0;
+  const c = parseFloat(tr.querySelector('.' + prefix + '-c').value) || 0;
+  const rate = parseFloat(tr.dataset.rate);
+  const u = c > p ? c - p : 0;
+  const a = u * rate;
+  tr.querySelector('.' + prefix + '-u').textContent = u > 0 ? u.toFixed(2) : '-';
+  tr.querySelector('.' + prefix + '-a').textContent = a > 0 ? formatMoney(a) : '-';
   updateMeterSummary(prefix);
 };
 
 function updateMeterSummary(prefix) {
-  let cnt=0,units=0,amt=0;
-  document.querySelectorAll('#'+prefix+'-body tr').forEach(tr => {
-    const c=parseFloat(tr.querySelector('.'+prefix+'-c').value); const p=parseFloat(tr.querySelector('.'+prefix+'-p').value)||0;
-    if(c||c===0){cnt++;const u=c>p?c-p:0;units+=u;amt+=u*parseFloat(tr.dataset.rate);}
+  let cnt = 0, units = 0, amt = 0;
+  document.querySelectorAll('#' + prefix + '-body tr').forEach(tr => {
+    const c = parseFloat(tr.querySelector('.' + prefix + '-c').value);
+    const p = parseFloat(tr.querySelector('.' + prefix + '-p').value) || 0;
+    if (c || c === 0) { cnt++; const u = c > p ? c - p : 0; units += u; amt += u * parseFloat(tr.dataset.rate); }
   });
-  const ce=document.getElementById(prefix+'-cnt'),ue=document.getElementById(prefix+'-units'),ae=document.getElementById(prefix+'-amt');
-  if(ce)ce.textContent=cnt; if(ue)ue.textContent=units.toFixed(2); if(ae)ae.textContent=formatMoney(amt);
+  const ce = document.getElementById(prefix + '-cnt'), ue = document.getElementById(prefix + '-units'), ae = document.getElementById(prefix + '-amt');
+  if (ce) ce.textContent = cnt;
+  if (ue) ue.textContent = units.toFixed(2);
+  if (ae) ae.textContent = formatMoney(amt);
 }
 
 window.saveAllRecordWater = async function() {
-  await saveAllMeterReadings('rw','water',window._rwPeriod);
+  await saveAllMeterReadings('rw', 'water', window._rwPeriod);
 };
 
 async function saveAllMeterReadings(prefix, type, periodId) {
-  const rows = document.querySelectorAll('#'+prefix+'-body tr');
-  let saved=0,errors=0;
-  for(const tr of rows){
-    const c=tr.querySelector('.'+prefix+'-c').value; if(c===''||c===undefined)continue;
-    const p=tr.querySelector('.'+prefix+'-p').value||0;
-    const fd=new FormData();fd.append('stall_id',tr.dataset.sid);fd.append('billing_period_id',periodId);
-    fd.append('type',type);fd.append('prev_reading',p);fd.append('curr_reading',c);
-    const res=tr.dataset.rid?await callAPI('PUT','/billing/readings/'+tr.dataset.rid,fd,true):await callAPI('POST','/billing/readings',fd,true);
-    if(res.error)errors++;else saved++;
+  const rows = document.querySelectorAll('#' + prefix + '-body tr');
+  let saved = 0, errors = 0, total = 0;
+  // Show saving overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'saving-overlay';
+  overlay.innerHTML = `<div style="position:fixed;inset:0;background:rgba(15,23,42,.6);display:flex;align-items:center;justify-content:center;z-index:99998;backdrop-filter:blur(4px)">
+    <div style="background:#fff;border-radius:20px;padding:40px 48px;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,.22)">
+      <div style="width:48px;height:48px;border:5px solid #e0f2fe;border-top-color:#0ea5e9;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px"></div>
+      <div style="font-size:18px;font-weight:600;color:#0f172a">กำลังบันทึก...</div>
+      <div style="font-size:14px;color:#64748b;margin-top:6px" id="saving-progress">0 / 0</div>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  for (const tr of rows) {
+    const c = tr.querySelector('.' + prefix + '-c').value;
+    if (c === '' || c === undefined) continue;
+    total++;
   }
-  toast(`บันทึก${type==='water'?'ค่าน้ำ':'ค่าไฟ'} ${saved} ร้าน${errors?' (ผิดพลาด '+errors+')':''}`,errors?'warning':'success');
-  if(type==='water')loadRecordWater(periodId);else loadRecordElectric(periodId);
+
+  let done = 0;
+  for (const tr of rows) {
+    const c = tr.querySelector('.' + prefix + '-c').value;
+    if (c === '' || c === undefined) continue;
+    const p = tr.querySelector('.' + prefix + '-p').value || 0;
+    const fd = new FormData();
+    fd.append('stall_id', tr.dataset.sid);
+    fd.append('billing_period_id', periodId);
+    fd.append('type', type);
+    fd.append('prev_reading', p);
+    fd.append('curr_reading', c);
+    const res = tr.dataset.rid ? await callAPI('PUT', '/billing/readings/' + tr.dataset.rid, fd, true) : await callAPI('POST', '/billing/readings', fd, true);
+    if (res.error) errors++; else saved++;
+    done++;
+    const prog = document.getElementById('saving-progress');
+    if (prog) prog.textContent = `${done} / ${total}`;
+  }
+  overlay.remove();
+  toast(
+    `บันทึก${type === 'water' ? 'ค่าน้ำ' : 'ค่าไฟ'} ${saved} ร้าน${errors ? ' (ผิดพลาด ' + errors + ')' : ''}`,
+    errors ? 'warning' : 'success'
+  );
+  if (type === 'water') startRecordWater(); else startRecordElectric();
 }
 
 // ═══════════════════════════════════════════════
@@ -1764,20 +1847,24 @@ async function pgRecordElectric() {
   el.innerHTML = `
     <div class="page-header"><h1>⚡ บันทึกค่าไฟ</h1></div>
     <div class="card">
-      <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
-        <label class="form-label" style="margin:0">เดือน:</label>
-        <select class="form-select" id="re-month" style="max-width:180px">${monthOpts}</select>
-        <label class="form-label" style="margin:0">ปี (พ.ศ.):</label>
-        <input type="number" class="form-input" id="re-year" value="${curYear}" style="max-width:120px">
-        <button class="btn btn-primary" onclick="startRecordElectric()">📋 โหลดข้อมูล</button>
+      <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:0.8rem 1rem;margin-bottom:1rem;color:#92400E;font-size:.9rem;display:flex;align-items:center;gap:.5rem">
+        ℹ️ กรอกเลขมิเตอร์ไฟฟ้าของแต่ละร้านค้า ระบบจะคำนวณหน่วยใช้งานและยอดเงินโดยอัตโนมัติ
       </div>
-      <div id="re-container"></div>
-      <div id="re-summary" style="display:none;margin-top:1rem;padding:1rem;background:#FFFBEB;border-radius:var(--radius-sm);gap:2rem;flex-wrap:wrap;font-size:.95rem">
-        <span>📊 กรอกแล้ว: <strong id="re-cnt">0</strong> ร้าน</span>
-        <span>⚡ รวมหน่วย: <strong id="re-units">0</strong></span>
-        <span>💰 รวมเงิน: <strong id="re-amt">0</strong> บาท</span>
+      <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
+        <div class="form-group" style="margin:0;flex:1;min-width:140px">
+          <label class="form-label">เดือน</label>
+          <select class="form-select" id="re-month" onchange="startRecordElectric()">${monthOpts}</select>
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:100px">
+          <label class="form-label">ปี (พ.ศ.)</label>
+          <input type="number" class="form-input" id="re-year" value="${curYear}" style="max-width:120px" onchange="startRecordElectric()">
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:100px">
+          <label class="form-label">⚡ อัตราค่าไฟ (บาท/หน่วย)</label>
+          <input type="number" class="form-input" id="re-rate" value="" step="0.5" min="0" readonly style="background:#FFFBEB;font-weight:700;color:#B45309">
+        </div>
       </div>
-      <div id="re-actions" style="display:none;margin-top:1rem"><button class="btn btn-primary" onclick="saveAllRecordElectric()">💾 บันทึกทั้งหมด</button></div>
+      <div id="re-container"><div class="loading">กำลังโหลด...</div></div>
     </div>`;
   startRecordElectric();
 }
@@ -1787,49 +1874,77 @@ window.startRecordElectric = async function() {
   const year = parseInt(document.getElementById('re-year').value);
   if (!month || !year) return toast('กรุณาเลือกเดือนและปี', 'error');
   const container = document.getElementById('re-container');
-  container.innerHTML = '<div class="loading">กำลังโหลด...</div>';
+  container.innerHTML = '<div class="loading">⏳ กำลังโหลดข้อมูล...</div>';
 
   const ensureRes = await callAPI('POST', '/billing/periods/ensure', { year, month });
   if (ensureRes.error) return container.innerHTML = `<p style="color:var(--danger)">${escapeHtml(ensureRes.error)}</p>`;
   const period = ensureRes.data;
   window._rePeriod = period.id;
 
-  loadRecordElectric(period.id);
-};
+  const rateInput = document.getElementById('re-rate');
+  if (rateInput) rateInput.value = period.electric_rate || 8;
 
-window.loadRecordElectric = async function(periodId) {
-  const [stallsRes, readingsRes, periodRes] = await Promise.all([
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  const prevPeriodId = `BP-${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+
+  const [stallsRes, readingsRes, prevReadingsRes] = await Promise.all([
     callAPI('GET', '/stalls?status=occupied'),
-    callAPI('GET', '/billing/readings?period_id=' + periodId + '&type=electric'),
-    callAPI('GET', '/billing/periods/' + periodId)
+    callAPI('GET', '/billing/readings?period_id=' + period.id + '&type=electric'),
+    callAPI('GET', '/billing/readings?period_id=' + prevPeriodId + '&type=electric')
   ]);
-  const stalls = stallsRes.data || [], readings = readingsRes.data || [], period = periodRes.data || {};
+  const stalls = stallsRes.data || [], readings = readingsRes.data || [];
+  const prevReadings = prevReadingsRes.data || [];
   const rMap = {}; readings.forEach(r => { rMap[r.stall_id] = r; });
+  const prevMap = {}; prevReadings.forEach(r => { prevMap[r.stall_id] = r; });
   const rate = period.electric_rate || 8;
 
+  if (!stalls.length) {
+    container.innerHTML = '<p style="padding:2rem;text-align:center;color:var(--text-secondary)">ไม่มีร้านค้าที่มีผู้เช่า</p>';
+    return;
+  }
+
   const rows = stalls.map((s,i) => {
-    const r = rMap[s.id]; const prev = r?.prev_reading||0; const curr = r?.curr_reading||'';
-    const usage = curr !== '' ? (curr-prev) : 0; const amt = usage > 0 ? usage*rate : 0;
+    const r = rMap[s.id];
+    const prevR = prevMap[s.id];
+    const prev = r ? (r.prev_reading || 0) : (prevR ? (prevR.curr_reading || 0) : 0);
+    const curr = r ? r.curr_reading : '';
+    const usage = curr !== '' && curr !== null ? Math.max(0, curr - prev) : 0;
+    const amt = usage > 0 ? usage * rate : 0;
     return `<tr data-sid="${s.id}" data-rid="${r?.id||''}" data-rate="${rate}">
-      <td>${i+1}</td><td>${escapeHtml(s.name)}</td><td>${s.zone||'-'}</td>
+      <td style="text-align:center">${i+1}</td>
+      <td>${escapeHtml(s.name)}</td>
+      <td>${escapeHtml(s.zone||'-')}</td>
       <td><input class="form-input re-p" type="number" step="0.01" value="${prev}" style="width:100px" onchange="calcMeterRow(this,'re')"></td>
-      <td><input class="form-input re-c" type="number" step="0.01" value="${curr}" style="width:100px" onchange="calcMeterRow(this,'re')"></td>
-      <td class="re-u">${usage>0?usage.toFixed(2):'-'}</td>
-      <td class="re-a">${amt>0?formatMoney(amt):'-'}</td>
+      <td><input class="form-input re-c" type="number" step="0.01" value="${curr===null?'':curr}" placeholder="กรอกเลข" style="width:100px" onchange="calcMeterRow(this,'re')"></td>
+      <td class="re-u" style="text-align:right;font-weight:700;color:#B45309">${usage>0?usage.toFixed(2):'-'}</td>
+      <td class="re-a" style="text-align:right;font-weight:700;color:#059669">${amt>0?formatMoney(amt):'-'}</td>
       <td>${r?'<span class="badge badge-success">จดแล้ว</span>':'<span class="badge badge-warning">รอจด</span>'}</td>
     </tr>`;
   }).join('');
 
-  document.getElementById('re-container').innerHTML = stalls.length ? `<div class="table-wrap"><table>
-    <thead><tr><th>#</th><th>ร้านค้า</th><th>โซน</th><th>มิเตอร์ก่อน</th><th>มิเตอร์ปัจจุบัน</th><th>หน่วยใช้</th><th>ยอดเงิน</th><th>สถานะ</th></tr></thead>
-    <tbody id="re-body">${rows}</tbody></table></div>` : '<p style="padding:1rem;text-align:center;color:var(--text-secondary)">ไม่มีร้านค้าที่มีผู้เช่า</p>';
-  document.getElementById('re-summary').style.display = stalls.length ? 'flex' : 'none';
-  document.getElementById('re-actions').style.display = stalls.length ? 'block' : 'none';
-  updateMeterSummary('re'); window._rePeriod = periodId;
+  container.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem">
+      <strong style="color:#B45309">📝 บันทึกเลขมิเตอร์</strong>
+      <input type="search" id="re-search" placeholder="🔍 ค้นหาร้านค้า..." oninput="filterMeterTable('re')" style="padding:.4rem .7rem;border:1px solid #d1d5db;border-radius:6px;font-size:13px;min-width:180px">
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>ร้านค้า</th><th>โซน</th><th>มิเตอร์ก่อน</th><th>มิเตอร์ปัจจุบัน</th><th>หน่วยใช้</th><th>ยอดเงิน (฿)</th><th>สถานะ</th></tr></thead>
+      <tbody id="re-body">${rows}</tbody>
+    </table></div>
+    <div style="background:linear-gradient(135deg,#FFFBEB,#FEF3C7);border:2px solid #FDE68A;border-radius:12px;padding:1.2rem;margin-top:1rem;display:flex;justify-content:space-around;flex-wrap:wrap;gap:1rem">
+      <div style="text-align:center"><div style="font-size:.9rem;color:#92400E">จำนวนร้าน</div><div style="font-size:1.5rem;font-weight:700;color:#B45309" id="re-cnt">0</div></div>
+      <div style="text-align:center"><div style="font-size:.9rem;color:#92400E">รวมหน่วยใช้</div><div style="font-size:1.5rem;font-weight:700;color:#B45309" id="re-units">0</div></div>
+      <div style="text-align:center"><div style="font-size:.9rem;color:#92400E">รวมยอดเงิน</div><div style="font-size:1.5rem;font-weight:700;color:#B45309" id="re-amt">0</div></div>
+    </div>
+    <div style="display:flex;gap:1rem;justify-content:center;margin-top:1.5rem;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="saveAllRecordElectric()" style="min-width:200px">💾 บันทึกข้อมูล</button>
+    </div>`;
+  updateMeterSummary('re');
 };
 
 window.saveAllRecordElectric = async function() {
-  await saveAllMeterReadings('re','electric',window._rePeriod);
+  await saveAllMeterReadings('re', 'electric', window._rePeriod);
 };
 
 // ═══════════════════════════════════════════════
@@ -1837,43 +1952,69 @@ window.saveAllRecordElectric = async function() {
 // ═══════════════════════════════════════════════
 async function pgNotifyBills() {
   const el = document.getElementById('content');
-  const periodsRes = await callAPI('GET', '/billing/periods');
-  const periods = periodsRes.data || [];
-  const periodOpts = periods.map(p => `<option value="${p.id}">${THAI_MONTHS[(p.month||1)-1]} ${p.year} (${p.status==='open'?'เปิด':'ปิด'})</option>`).join('');
+  const now = new Date();
+  const curMonth = now.getMonth() + 1;
+  const curYear = now.getFullYear() + 543;
+  const monthOpts = THAI_MONTHS.map((m,i) => `<option value="${i+1}" ${(i+1)===curMonth?'selected':''}>${m}</option>`).join('');
 
   el.innerHTML = `
-    <div class="page-header"><h1>แจ้งยอดชำระ</h1></div>
+    <div class="page-header"><h1>📋 แจ้งยอดชำระ</h1></div>
     <div class="card">
-      <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
-        <label class="form-label" style="margin:0">รอบบิล:</label>
-        <select class="form-select" id="nb-period" style="max-width:250px">${periodOpts}</select>
+      <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
+        <div class="form-group" style="margin:0;flex:1;min-width:140px">
+          <label class="form-label">เดือน</label>
+          <select class="form-select" id="nb-month" onchange="loadNotifyBills()">${monthOpts}</select>
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:100px">
+          <label class="form-label">ปี (พ.ศ.)</label>
+          <input type="number" class="form-input" id="nb-year" value="${curYear}" style="max-width:120px" onchange="loadNotifyBills()">
+        </div>
         <button class="btn btn-primary" onclick="loadNotifyBills()">📋 ดึงข้อมูล</button>
+        <button class="btn btn-secondary" onclick="generateBillsForPeriod()">⚙️ สร้างบิล</button>
       </div>
-      <div id="nb-container"></div>
+      <div id="nb-container"><div class="loading">กำลังโหลด...</div></div>
     </div>`;
+  loadNotifyBills();
 }
 
 window.loadNotifyBills = async function() {
-  const periodId = document.getElementById('nb-period').value;
-  if (!periodId) return toast('เลือกรอบบิลก่อน', 'warning');
+  const month = parseInt(document.getElementById('nb-month').value);
+  const year = parseInt(document.getElementById('nb-year').value);
+  if (!month || !year) return;
+  const container = document.getElementById('nb-container');
+  container.innerHTML = '<div class="loading">⏳ กำลังโหลดข้อมูล...</div>';
 
-  const [billsRes, periodRes] = await Promise.all([
-    callAPI('GET', '/billing/bills?period_id=' + periodId),
-    callAPI('GET', '/billing/periods/' + periodId)
-  ]);
-  const bills = billsRes.data || [], period = periodRes.data || {};
+  const ensureRes = await callAPI('POST', '/billing/periods/ensure', { year, month });
+  if (ensureRes.error) return container.innerHTML = `<p style="color:var(--danger)">${escapeHtml(ensureRes.error)}</p>`;
+  const period = ensureRes.data;
+  window._nbPeriod = period.id;
+
+  const billsRes = await callAPI('GET', '/billing/bills?period_id=' + period.id);
+  const bills = billsRes.data || [];
   const periodLabel = `${THAI_MONTHS[(period.month||1)-1]} ${period.year}`;
 
-  let totalRent=0,totalWater=0,totalElec=0,totalCommon=0,totalAll=0;
+  if (!bills.length) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:2rem;color:var(--text-secondary)">
+        <p>ยังไม่มีบิลสำหรับรอบ ${periodLabel}</p>
+        <p style="font-size:.9rem">กดปุ่ม <strong>⚙️ สร้างบิล</strong> เพื่อสร้างบิลจากข้อมูลสัญญาและมิเตอร์</p>
+      </div>`;
+    return;
+  }
+
+  let totalRent=0, totalWater=0, totalElec=0, totalCommon=0, totalAll=0;
   const rows = bills.map((b,i) => {
-    totalRent+=b.rent_amount||0; totalWater+=b.water_amount||0; totalElec+=b.electric_amount||0;
-    totalCommon+=b.common_fee||0; totalAll+=b.total_amount||0;
-    const statusBadge = b.status==='issued'?'<span class="badge badge-info">ออกแล้ว</span>':
-      b.status==='paid'?'<span class="badge badge-success">ชำระแล้ว</span>':
-      b.status==='draft'?'<span class="badge badge-secondary">ร่าง</span>':
-      b.status==='overdue'?'<span class="badge badge-danger">ค้าง</span>':renderBadge(b.status,STATUS_BILL);
+    totalRent += b.rent_amount||0; totalWater += b.water_amount||0;
+    totalElec += b.electric_amount||0; totalCommon += b.common_fee||0;
+    totalAll += b.total_amount||0;
+    const statusBadge = b.status === 'issued' ? '<span class="badge badge-info">ออกแล้ว</span>'
+      : b.status === 'paid' ? '<span class="badge badge-success">ชำระแล้ว</span>'
+      : b.status === 'draft' ? '<span class="badge badge-secondary">ร่าง</span>'
+      : b.status === 'overdue' ? '<span class="badge badge-danger">ค้าง</span>'
+      : renderBadge(b.status, STATUS_BILL);
     return `<tr>
-      <td>${i+1}</td><td>${escapeHtml(b.stall_name||'')}</td>
+      <td style="text-align:center">${i+1}</td>
+      <td>${escapeHtml(b.stall_name||'')}</td>
       <td class="right">${formatMoney(b.rent_amount)}</td>
       <td class="right">${formatMoney(b.water_amount)}</td>
       <td class="right">${formatMoney(b.electric_amount)}</td>
@@ -1883,40 +2024,62 @@ window.loadNotifyBills = async function() {
     </tr>`;
   }).join('');
 
-  const draftCount = bills.filter(b=>b.status==='draft').length;
-  const issuedCount = bills.filter(b=>b.status==='issued'||b.status==='overdue').length;
+  const draftCount = bills.filter(b => b.status === 'draft').length;
+  const issuedCount = bills.filter(b => b.status === 'issued' || b.status === 'overdue').length;
+  const paidCount = bills.filter(b => b.status === 'paid').length;
 
-  document.getElementById('nb-container').innerHTML = `
+  container.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1rem">
-      <div class="stat-card"><div class="stat-value">${bills.length}</div><div class="stat-label">ร้านทั้งหมด</div></div>
-      <div class="stat-card"><div class="stat-value">${formatMoney(totalAll)}</div><div class="stat-label">ยอดรวม</div></div>
-      <div class="stat-card"><div class="stat-value">${draftCount}</div><div class="stat-label">รอออกบิล</div></div>
-      <div class="stat-card"><div class="stat-value">${issuedCount}</div><div class="stat-label">ออกบิลแล้ว</div></div>
+      <div class="stat-card" style="border-left:4px solid var(--primary)"><div class="stat-value">${bills.length}</div><div class="stat-label">ร้านทั้งหมด</div></div>
+      <div class="stat-card" style="border-left:4px solid var(--info)"><div class="stat-value">${formatMoney(totalAll)}</div><div class="stat-label">ยอดรวม (บาท)</div></div>
+      <div class="stat-card" style="border-left:4px solid #9CA3AF"><div class="stat-value">${draftCount}</div><div class="stat-label">ร่าง</div></div>
+      <div class="stat-card" style="border-left:4px solid var(--warning)"><div class="stat-value">${issuedCount}</div><div class="stat-label">ออกบิลแล้ว</div></div>
+      <div class="stat-card" style="border-left:4px solid var(--success)"><div class="stat-value">${paidCount}</div><div class="stat-label">ชำระแล้ว</div></div>
     </div>
     <h3>📋 สรุปยอด — ${periodLabel}</h3>
     <div class="table-wrap"><table>
       <thead><tr><th>#</th><th>ร้านค้า</th><th>ค่าเช่า</th><th>ค่าน้ำ</th><th>ค่าไฟ</th><th>ส่วนกลาง</th><th>รวม</th><th>สถานะ</th></tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr style="font-weight:700;background:#F8FAFC">
-        <td colspan="2">รวมทั้งสิ้น</td><td class="right">${formatMoney(totalRent)}</td><td class="right">${formatMoney(totalWater)}</td>
-        <td class="right">${formatMoney(totalElec)}</td><td class="right">${formatMoney(totalCommon)}</td>
-        <td class="right" style="font-size:1.1em">${formatMoney(totalAll)}</td><td></td>
+        <td colspan="2">รวมทั้งสิ้น</td>
+        <td class="right">${formatMoney(totalRent)}</td>
+        <td class="right">${formatMoney(totalWater)}</td>
+        <td class="right">${formatMoney(totalElec)}</td>
+        <td class="right">${formatMoney(totalCommon)}</td>
+        <td class="right" style="font-size:1.1em">${formatMoney(totalAll)}</td>
+        <td></td>
       </tr></tfoot>
     </table></div>
     ${draftCount ? `<div style="margin-top:1rem;display:flex;gap:1rem;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="batchIssueBills('${periodId}')">📤 ออกบิลทั้งหมด (${draftCount} ร้าน)</button>
-    </div>` : '<div style="margin-top:1rem;padding:1rem;background:#D1FAE5;border-radius:8px">✅ ออกบิลครบทุกร้านแล้ว</div>'}`;
+      <button class="btn btn-primary" onclick="batchIssueBills('${period.id}')">📤 ออกบิลทั้งหมด (${draftCount} ร้าน)</button>
+    </div>` : '<div style="margin-top:1rem;padding:1rem;background:#D1FAE5;border-radius:8px;color:#065F46">✅ ออกบิลครบทุกร้านแล้ว</div>'}`;
+};
+
+window.generateBillsForPeriod = async function() {
+  const month = parseInt(document.getElementById('nb-month').value);
+  const year = parseInt(document.getElementById('nb-year').value);
+  if (!month || !year) return toast('กรุณาเลือกเดือนและปี', 'error');
+
+  if (!await confirmDialog('สร้างบิลอัตโนมัติจากข้อมูลสัญญาและมิเตอร์?')) return;
+
+  const ensureRes = await callAPI('POST', '/billing/periods/ensure', { year, month });
+  if (ensureRes.error) return toast(ensureRes.error, 'error');
+
+  const res = await callAPI('POST', '/billing/generate', { period_id: ensureRes.data.id });
+  if (res.error) return toast(res.error, 'error');
+  toast(`สร้างบิลสำเร็จ ${res.data?.count || 0} ร้าน`, 'success');
+  loadNotifyBills();
 };
 
 window.batchIssueBills = async function(periodId) {
   if (!await confirmDialog('ออกบิลทุกร้านที่ยังเป็นร่าง? ผู้เช่าจะได้รับแจ้งยอด')) return;
   const bills = (await callAPI('GET', '/billing/bills?period_id=' + periodId + '&status=draft')).data || [];
-  let ok=0,fail=0;
+  let ok = 0, fail = 0;
   for (const b of bills) {
     const res = await callAPI('POST', '/billing/bills/' + b.id + '/issue');
-    if(res.error)fail++;else ok++;
+    if (res.error) fail++; else ok++;
   }
-  toast(`ออกบิลสำเร็จ ${ok} ร้าน${fail?' (ผิดพลาด '+fail+')':''}`, fail?'warning':'success');
+  toast(`ออกบิลสำเร็จ ${ok} ร้าน${fail ? ' (ผิดพลาด ' + fail + ')' : ''}`, fail ? 'warning' : 'success');
   loadNotifyBills();
 };
 
@@ -1925,66 +2088,108 @@ window.batchIssueBills = async function(periodId) {
 // ═══════════════════════════════════════════════
 async function pgCheckSlips() {
   const el = document.getElementById('content');
-  const periodsRes = await callAPI('GET', '/billing/periods');
-  const periods = periodsRes.data || [];
-  const periodOpts = periods.map(p => `<option value="${p.id}">${THAI_MONTHS[(p.month||1)-1]} ${p.year}</option>`).join('');
+  const now = new Date();
+  const curMonth = now.getMonth() + 1;
+  const curYear = now.getFullYear() + 543;
+  const monthOpts = THAI_MONTHS.map((m,i) => `<option value="${i+1}" ${(i+1)===curMonth?'selected':''}>${m}</option>`).join('');
 
   el.innerHTML = `
-    <div class="page-header"><h1>ตรวจสลิป</h1></div>
+    <div class="page-header"><h1>✓ ตรวจสลิป</h1></div>
     <div class="card">
-      <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
-        <label class="form-label" style="margin:0">รอบบิล:</label>
-        <select class="form-select" id="cs-period" style="max-width:250px">${periodOpts}</select>
+      <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
+        <div class="form-group" style="margin:0;flex:1;min-width:140px">
+          <label class="form-label">เดือน</label>
+          <select class="form-select" id="cs-month" onchange="loadCheckSlips()">${monthOpts}</select>
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:100px">
+          <label class="form-label">ปี (พ.ศ.)</label>
+          <input type="number" class="form-input" id="cs-year" value="${curYear}" style="max-width:120px" onchange="loadCheckSlips()">
+        </div>
         <button class="btn btn-primary" onclick="loadCheckSlips()">🔍 โหลดข้อมูล</button>
       </div>
-      <div id="cs-container"></div>
+      <div id="cs-container"><div class="loading">กำลังโหลด...</div></div>
     </div>`;
+  loadCheckSlips();
 }
 
 window.loadCheckSlips = async function() {
-  const periodId = document.getElementById('cs-period').value;
-  if (!periodId) return toast('เลือกรอบบิลก่อน', 'warning');
+  const month = parseInt(document.getElementById('cs-month').value);
+  const year = parseInt(document.getElementById('cs-year').value);
+  if (!month || !year) return;
+  const container = document.getElementById('cs-container');
+  container.innerHTML = '<div class="loading">⏳ กำลังโหลดข้อมูล...</div>';
+
+  const ensureRes = await callAPI('POST', '/billing/periods/ensure', { year, month });
+  if (ensureRes.error) return container.innerHTML = `<p style="color:var(--danger)">${escapeHtml(ensureRes.error)}</p>`;
+  const period = ensureRes.data;
+  window._csPeriod = period.id;
 
   const [billsRes, paymentsRes] = await Promise.all([
-    callAPI('GET', '/billing/bills?period_id=' + periodId),
-    callAPI('GET', '/payments?period_id=' + periodId)
+    callAPI('GET', '/billing/bills?period_id=' + period.id),
+    callAPI('GET', '/payments?period_id=' + period.id)
   ]);
   const bills = billsRes.data || [], payments = paymentsRes.data || [];
-  const payMap = {}; payments.forEach(p => { if(!payMap[p.bill_id])payMap[p.bill_id]=[]; payMap[p.bill_id].push(p); });
+  const payMap = {};
+  payments.forEach(p => { if (!payMap[p.bill_id]) payMap[p.bill_id] = []; payMap[p.bill_id].push(p); });
 
-  let verified=0,pending=0,rejected=0,unpaid=0;
-  const rows = bills.filter(b=>b.status!=='draft').map((b,i) => {
+  let verified = 0, pending = 0, rejected = 0, unpaid = 0;
+
+  const issuedBills = bills.filter(b => b.status !== 'draft');
+
+  if (!issuedBills.length) {
+    container.innerHTML = `<p style="padding:2rem;text-align:center;color:var(--text-secondary)">ไม่มีบิลที่ออกแล้วสำหรับรอบ ${THAI_MONTHS[(period.month||1)-1]} ${period.year}</p>`;
+    return;
+  }
+
+  const rows = issuedBills.map((b,i) => {
     const pays = payMap[b.id] || [];
     const latestPay = pays[0];
-    let statusHTML='',rowBg='';
+    let statusHTML = '', rowBg = '';
 
     if (!latestPay) {
-      unpaid++; statusHTML='<span class="badge badge-danger">ยังไม่ชำระ</span>'; rowBg='#FEF2F2';
-    } else if (latestPay.status==='verified') {
-      verified++; statusHTML='<span class="badge badge-success">✅ อนุมัติ</span>'; rowBg='#F0FDF4';
-    } else if (latestPay.status==='rejected') {
-      rejected++; statusHTML='<span class="badge badge-danger">❌ ปฏิเสธ</span>'; rowBg='#FEF2F2';
+      unpaid++;
+      statusHTML = '<span class="badge badge-danger">ยังไม่ชำระ</span>';
+      rowBg = '#FEF2F2';
+    } else if (latestPay.status === 'verified') {
+      verified++;
+      statusHTML = '<span class="badge badge-success">✅ อนุมัติ</span>';
+      rowBg = '#F0FDF4';
+    } else if (latestPay.status === 'rejected') {
+      rejected++;
+      statusHTML = '<span class="badge badge-danger">❌ ปฏิเสธ</span>';
+      rowBg = '#FEF2F2';
     } else {
       pending++;
-      const diff = Math.abs((latestPay.amount||0) - (b.total_amount||0));
-      statusHTML = diff < 1 ? '<span class="badge badge-warning">⏳ รอตรวจ (ยอดตรง)</span>' : '<span class="badge badge-warning">⚠️ รอตรวจ (ยอดไม่ตรง)</span>';
-      rowBg='#FFFBEB';
+      const diff = Math.abs((latestPay.amount || 0) - (b.total_amount || 0));
+      statusHTML = diff < 1
+        ? '<span class="badge badge-warning">⏳ รอตรวจ (ยอดตรง)</span>'
+        : '<span class="badge badge-warning">⚠️ รอตรวจ (ยอดไม่ตรง)</span>';
+      rowBg = '#FFFBEB';
     }
 
+    const slipBtn = latestPay?.slip_photo_key
+      ? `<button class="btn btn-sm btn-secondary" onclick="showSlipLightbox('${latestPay.slip_photo_key}','${latestPay.id}','${escapeHtml(b.stall_name||'')}',${b.total_amount},${latestPay.amount})">👁 ดูสลิป</button>`
+      : '-';
+
+    const actionBtns = latestPay && latestPay.status === 'pending'
+      ? `<button class="btn btn-sm btn-success" onclick="quickApprove('${latestPay.id}')">✓ อนุมัติ</button>
+         <button class="btn btn-sm btn-danger" onclick="quickReject('${latestPay.id}')">✕ ปฏิเสธ</button>`
+      : (latestPay && latestPay.status === 'verified'
+        ? `<button class="btn btn-sm" style="background:#DBEAFE;color:#1E40AF" onclick="sendReceipt('${b.id}','${latestPay.id}')">📧 ใบเสร็จ</button>`
+        : '');
+
     return `<tr style="background:${rowBg}">
-      <td>${i+1}</td><td>${escapeHtml(b.stall_name||'')}</td>
+      <td style="text-align:center">${i+1}</td>
+      <td>${escapeHtml(b.stall_name||'')}</td>
       <td class="right">${formatMoney(b.total_amount)}</td>
-      <td class="right">${latestPay?formatMoney(latestPay.amount):'-'}</td>
+      <td class="right">${latestPay ? formatMoney(latestPay.amount) : '-'}</td>
       <td>${statusHTML}</td>
-      <td>${latestPay?.slip_photo_key?`<button class="btn btn-sm btn-secondary" onclick="showSlipLightbox('${latestPay.slip_photo_key}','${latestPay.id}','${escapeHtml(b.stall_name||'')}',${b.total_amount},${latestPay.amount})">👁 ดูสลิป</button>`:'-'}</td>
-      <td>${latestPay&&latestPay.status==='pending'?`
-        <button class="btn btn-sm btn-success" onclick="quickApprove('${latestPay.id}')">✓ อนุมัติ</button>
-        <button class="btn btn-sm btn-danger" onclick="quickReject('${latestPay.id}')">✕ ปฏิเสธ</button>
-      `:''}</td>
+      <td>${slipBtn}</td>
+      <td>${actionBtns}</td>
     </tr>`;
   }).join('');
 
-  document.getElementById('cs-container').innerHTML = `
+  container.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1rem">
       <div class="stat-card" style="border-left:4px solid var(--success)"><div class="stat-value">${verified}</div><div class="stat-label">✅ อนุมัติ</div></div>
       <div class="stat-card" style="border-left:4px solid var(--warning)"><div class="stat-value">${pending}</div><div class="stat-label">⏳ รอตรวจ</div></div>
@@ -1994,8 +2199,8 @@ window.loadCheckSlips = async function() {
     <div class="table-wrap"><table>
       <thead><tr><th>#</th><th>ร้านค้า</th><th>ยอดแจ้ง</th><th>ยอดชำระ</th><th>สถานะ</th><th>สลิป</th><th>ดำเนินการ</th></tr></thead>
       <tbody>${rows}</tbody>
-    </table></div>`;
-  window._csPeriod = periodId;
+    </table></div>
+    ${verified > 0 ? `<div style="margin-top:1rem"><button class="btn" style="background:#DBEAFE;color:#1E40AF" onclick="batchSendReceipts()">📧 ส่งใบเสร็จทั้งหมด (${verified} ร้าน)</button></div>` : ''}`;
 };
 
 window.showSlipLightbox = function(fileKey, paymentId, stallName, notified, paid) {
@@ -2008,30 +2213,71 @@ window.showSlipLightbox = function(fileKey, paymentId, stallName, notified, paid
     </div>
     <div class="modal-body" style="text-align:center">
       <img src="/api/upload/${fileKey}" style="max-width:100%;max-height:60vh;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.15)" onerror="this.src='';this.alt='ไม่สามารถโหลดรูปได้'">
-      <div style="margin-top:1rem;display:flex;justify-content:center;gap:2rem;font-size:1rem">
-        <div><small style="color:#6B7280">ยอดแจ้ง</small><div style="font-weight:700;font-size:1.2em">${formatMoney(notified)}</div></div>
-        <div><small style="color:#6B7280">ยอดชำระ</small><div style="font-weight:700;font-size:1.2em;color:${match?'var(--success)':'var(--danger)'}">${formatMoney(paid)}</div></div>
+      <div style="margin-top:1.5rem;display:flex;justify-content:center;gap:2rem;font-size:1rem">
+        <div style="background:#F0FDF4;border:2px solid #BBF7D0;border-radius:12px;padding:1rem 1.5rem;min-width:120px">
+          <small style="color:#6B7280">ยอดแจ้ง</small>
+          <div style="font-weight:700;font-size:1.4em;color:#059669">${formatMoney(notified)}</div>
+        </div>
+        <div style="background:${match?'#F0FDF4':'#FEF2F2'};border:2px solid ${match?'#BBF7D0':'#FECACA'};border-radius:12px;padding:1rem 1.5rem;min-width:120px">
+          <small style="color:#6B7280">ยอดชำระ</small>
+          <div style="font-weight:700;font-size:1.4em;color:${match?'#059669':'#DC2626'}">${formatMoney(paid)}</div>
+        </div>
       </div>
-      ${!match?`<div style="margin-top:.5rem;color:var(--danger);font-weight:600">⚠️ ยอดต่างกัน ${formatMoney(diff)} บาท</div>`:'<div style="margin-top:.5rem;color:var(--success);font-weight:600">✅ ยอดตรงกัน</div>'}
+      ${!match
+        ? `<div style="margin-top:1rem;padding:.75rem 1rem;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;color:#DC2626;font-weight:600">⚠️ ยอดต่างกัน ${formatMoney(diff)} บาท</div>`
+        : '<div style="margin-top:1rem;padding:.75rem 1rem;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;color:#059669;font-weight:600">✅ ยอดตรงกัน</div>'}
     </div>
     <div class="modal-footer" style="justify-content:center;gap:1rem">
       <button class="btn btn-success" onclick="closeModal();quickApprove('${paymentId}')" style="min-width:150px">✓ อนุมัติ</button>
       <button class="btn btn-danger" onclick="closeModal();quickReject('${paymentId}')" style="min-width:150px">✕ ปฏิเสธ</button>
-    </div>`, {large:true});
+    </div>`, { large: true });
 };
 
 window.quickApprove = async function(id) {
   if (!await confirmDialog('อนุมัติการชำระนี้?')) return;
   const res = await callAPI('PUT', '/payments/' + id + '/verify', { status: 'verified' });
   if (res.error) return toast(res.error, 'error');
-  toast('อนุมัติสำเร็จ', 'success'); loadCheckSlips();
+  toast('อนุมัติสำเร็จ', 'success');
+  loadCheckSlips();
 };
 
 window.quickReject = async function(id) {
-  if (!await confirmDialog('ปฏิเสธสลิปนี้? ผู้เช่าจะต้องส่งสลิปใหม่', {danger:true})) return;
+  if (!await confirmDialog('ปฏิเสธสลิปนี้? ผู้เช่าจะต้องส่งสลิปใหม่', { danger: true })) return;
   const res = await callAPI('PUT', '/payments/' + id + '/verify', { status: 'rejected' });
   if (res.error) return toast(res.error, 'error');
-  toast('ปฏิเสธสำเร็จ', 'success'); loadCheckSlips();
+  toast('ปฏิเสธสำเร็จ', 'success');
+  loadCheckSlips();
+};
+
+window.sendReceipt = async function(billId, paymentId) {
+  toast('กำลังสร้างใบเสร็จ...', 'info');
+  const res = await callAPI('POST', '/receipts', { bill_id: billId, payment_id: paymentId });
+  if (res.error) return toast(res.error, 'error');
+  toast('สร้างใบเสร็จสำเร็จ', 'success');
+};
+
+window.batchSendReceipts = async function() {
+  if (!await confirmDialog('สร้างใบเสร็จสำหรับร้านที่อนุมัติแล้วทั้งหมด?')) return;
+  toast('กำลังดำเนินการ...', 'info');
+  // Re-fetch data to get payment IDs
+  const periodId = window._csPeriod;
+  const [billsRes, paymentsRes] = await Promise.all([
+    callAPI('GET', '/billing/bills?period_id=' + periodId),
+    callAPI('GET', '/payments?period_id=' + periodId)
+  ]);
+  const bills = billsRes.data || [], payments = paymentsRes.data || [];
+  const payMap = {};
+  payments.forEach(p => { if (!payMap[p.bill_id]) payMap[p.bill_id] = []; payMap[p.bill_id].push(p); });
+
+  let ok = 0, fail = 0;
+  for (const b of bills) {
+    const pays = payMap[b.id] || [];
+    const verified = pays.find(p => p.status === 'verified');
+    if (!verified) continue;
+    const res = await callAPI('POST', '/receipts', { bill_id: b.id, payment_id: verified.id });
+    if (res.error) fail++; else ok++;
+  }
+  toast(`สร้างใบเสร็จ ${ok} ร้าน${fail ? ' (ผิดพลาด ' + fail + ')' : ''}`, fail ? 'warning' : 'success');
 };
 
 // ═══════════════════════════════════════════════
@@ -2040,44 +2286,54 @@ window.quickReject = async function(id) {
 async function pgUploadSlip() {
   const el = document.getElementById('content');
   const user = getCurrentUser();
+  el.innerHTML = `<div class="page-header"><h1>🧾 ส่งสลิป</h1></div><div class="loading">กำลังโหลด...</div>`;
+
   const billsRes = await callAPI('GET', '/billing/bills?stall_id=' + user.stall_id);
   const bills = (billsRes.data || []).filter(b => b.status === 'issued' || b.status === 'overdue');
   const paymentsRes = await callAPI('GET', '/payments?stall_id=' + user.stall_id);
   const payments = paymentsRes.data || [];
-  const paidBillIds = payments.filter(p=>p.status!=='rejected').map(p=>p.bill_id);
+  const paidBillIds = payments.filter(p => p.status !== 'rejected').map(p => p.bill_id);
   const unpaid = bills.filter(b => !paidBillIds.includes(b.id));
 
   el.innerHTML = `
-    <div class="page-header"><h1>ส่งสลิป</h1></div>
+    <div class="page-header"><h1>🧾 ส่งสลิป</h1></div>
     ${unpaid.length ? `
-    <div style="display:grid;gap:1rem;max-width:600px">
-      ${unpaid.map(b => `
-        <div class="card" style="border-left:4px solid ${b.status==='overdue'?'var(--danger)':'var(--warning)'}">
-          <div class="card-header"><h3 class="card-title">${escapeHtml(b.period_label||b.id)}</h3>${renderBadge(b.status,STATUS_BILL)}</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.9rem;margin-bottom:1rem">
-            <div>ค่าเช่า: <strong>${formatMoney(b.rent_amount)}</strong></div>
-            <div>ค่าน้ำ: <strong>${formatMoney(b.water_amount)}</strong></div>
-            <div>ค่าไฟ: <strong>${formatMoney(b.electric_amount)}</strong></div>
-            <div>ส่วนกลาง: <strong>${formatMoney(b.common_fee)}</strong></div>
+    <div style="display:grid;gap:1.5rem;max-width:600px">
+      ${unpaid.map(b => {
+        const borderColor = b.status === 'overdue' ? 'var(--danger)' : 'var(--warning)';
+        return `
+        <div class="card" style="border-left:4px solid ${borderColor}">
+          <div class="card-header" style="margin-bottom:1rem">
+            <h3 class="card-title" style="margin:0">${THAI_MONTHS[(parseInt(b.period_label?.split('/')[1])||1)-1] || ''} ${b.period_label?.split('/')[0] || ''}</h3>
+            ${renderBadge(b.status, STATUS_BILL)}
           </div>
-          <div style="font-size:1.3em;font-weight:700;color:var(--primary);margin-bottom:1rem">
-            รวม: ${formatMoney(b.total_amount)} บาท
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;font-size:.9rem;margin-bottom:1rem">
+            <div style="background:#F8FAFC;padding:.5rem .75rem;border-radius:6px">ค่าเช่า: <strong>${formatMoney(b.rent_amount)}</strong></div>
+            <div style="background:#F0FDFF;padding:.5rem .75rem;border-radius:6px">ค่าน้ำ: <strong>${formatMoney(b.water_amount)}</strong></div>
+            <div style="background:#FFFBEB;padding:.5rem .75rem;border-radius:6px">ค่าไฟ: <strong>${formatMoney(b.electric_amount)}</strong></div>
+            <div style="background:#F0FDF4;padding:.5rem .75rem;border-radius:6px">ส่วนกลาง: <strong>${formatMoney(b.common_fee)}</strong></div>
           </div>
-          ${b.due_date?`<div style="font-size:.85rem;color:${b.status==='overdue'?'var(--danger)':'var(--text-light)'}">กำหนดชำระ: ${formatDate(b.due_date)}</div>`:''}
-          <div style="margin-top:1rem">
-            <button class="btn btn-primary" onclick="showSlipUploadForm('${b.id}',${b.total_amount})">📤 ส่งสลิป</button>
+          <div style="text-align:center;padding:1rem;background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border-radius:10px;margin-bottom:1rem">
+            <div style="font-size:.85rem;color:var(--text-secondary)">ยอดรวมที่ต้องชำระ</div>
+            <div style="font-size:2em;font-weight:700;color:var(--primary)">${formatMoney(b.total_amount)} บาท</div>
           </div>
-        </div>
-      `).join('')}
+          ${b.due_date ? `<div style="font-size:.85rem;color:${b.status==='overdue'?'var(--danger)':'var(--text-light)'}">กำหนดชำระ: ${formatDate(b.due_date)}</div>` : ''}
+          <div style="margin-top:1rem;text-align:center">
+            <button class="btn btn-primary" onclick="showSlipUploadForm('${b.id}',${b.total_amount})" style="min-width:200px">📤 ส่งสลิปชำระเงิน</button>
+          </div>
+        </div>`;
+      }).join('')}
     </div>` : '<div class="card" style="text-align:center;padding:3rem;color:var(--text-light)">🎉 ไม่มียอดค้างชำระ</div>'}
 
     <h3 style="margin-top:2rem">📋 ประวัติการชำระ</h3>
     <div class="card">
       ${renderTable([
-        {key:'bill_id',label:'บิล'},{key:'amount',label:'ยอด',money:true},
-        {key:'method',label:'ช่องทาง',render:v=>({cash:'เงินสด',transfer:'โอน',promptpay:'PromptPay'}[v]||v)},
-        {key:'paid_at',label:'วันชำระ',date:true},{key:'status',label:'สถานะ',badge:STATUS_PAYMENT}
-      ], payments, row => row.slip_photo_key?`<button class="btn btn-sm btn-secondary" onclick="viewSlip('${row.slip_photo_key}')">ดูสลิป</button>`:'')}
+        { key: 'bill_id', label: 'บิล' },
+        { key: 'amount', label: 'ยอด', money: true },
+        { key: 'method', label: 'ช่องทาง', render: v => ({ cash: 'เงินสด', transfer: 'โอน', promptpay: 'PromptPay' }[v] || v) },
+        { key: 'paid_at', label: 'วันชำระ', date: true },
+        { key: 'status', label: 'สถานะ', badge: STATUS_PAYMENT }
+      ], payments, row => row.slip_photo_key ? `<button class="btn btn-sm btn-secondary" onclick="viewSlip('${row.slip_photo_key}')">ดูสลิป</button>` : '')}
     </div>`;
 }
 
@@ -2087,7 +2343,7 @@ window.showSlipUploadForm = function(billId, amount) {
     <form onsubmit="submitSlipUpload(event)">
       <div class="modal-body">
         <input type="hidden" name="bill_id" value="${billId}">
-        <div style="text-align:center;margin-bottom:1.5rem">
+        <div style="text-align:center;margin-bottom:1.5rem;padding:1rem;background:linear-gradient(135deg,#EFF6FF,#DBEAFE);border-radius:10px">
           <div style="font-size:.9rem;color:var(--text-light)">ยอดที่ต้องชำระ</div>
           <div style="font-size:2em;font-weight:700;color:var(--primary)">${formatMoney(amount)} บาท</div>
         </div>
@@ -2117,7 +2373,7 @@ window.showSlipUploadForm = function(billId, amount) {
         <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
         <button type="submit" class="btn btn-primary">📤 ส่งสลิป</button>
       </div>
-    </form>`, {large:true});
+    </form>`, { large: true });
 };
 
 window.previewSlipFile = function(input) {
@@ -2132,7 +2388,9 @@ window.submitSlipUpload = async function(e) {
   const fd = new FormData(e.target);
   const res = await callAPI('POST', '/payments', fd, true);
   if (res.error) return toast(res.error, 'error');
-  toast('ส่งสลิปสำเร็จ รอตรวจสอบ', 'success'); closeModal(); pgUploadSlip();
+  toast('ส่งสลิปสำเร็จ รอตรวจสอบ', 'success');
+  closeModal();
+  pgUploadSlip();
 };
 
 // ═══════════════════════════════════════════════
