@@ -50,8 +50,9 @@ async function pgDashboard() {
 
   if (user.role === 'stall_owner') return pgDashboardStallOwner(el, user);
   if (user.role === 'executive') return pgDashboardExec(el, user);
+  if (user.role === 'inspector') return pgDashboardInspector(el, user);
 
-  // Admin / officer dashboard
+  // Admin / staff dashboard
   const stats = await callAPI('GET', '/reports/dashboard-stats');
   const s = stats.data || {};
 
@@ -342,6 +343,53 @@ async function pgDashboardExec(el, user) {
       <div class="admin-stat"><div class="admin-stat-icon">🔍</div><div class="admin-stat-value">${s.avg_inspection || '—'}</div><div class="admin-stat-label">คะแนนตรวจเฉลี่ย</div></div>
     </div>
     <div class="card"><div class="card-header"><h3>รายงานรายเดือน</h3></div><div id="exec-chart-container" style="height:300px;display:flex;align-items:center;justify-content:center"><small>กำลังโหลดกราฟ...</small></div></div>`;
+}
+
+async function pgDashboardInspector(el, user) {
+  const [inspRes, penRes] = await Promise.all([
+    callAPI('GET', '/inspections?limit=10'),
+    callAPI('GET', '/penalties?limit=5')
+  ]);
+  const inspections = inspRes.data || [];
+  const penalties = penRes.data || [];
+
+  // Count recent stats
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const monthInspections = inspections.filter(i => (i.inspection_date || i.created_at || '').startsWith(thisMonth));
+  const pendingPenalties = penalties.filter(p => p.status === 'pending' || p.status === 'issued');
+
+  el.innerHTML = `
+    <div class="admin-stats">
+      <div class="admin-stat" onclick="location.hash='#/inspections'">
+        <div class="admin-stat-icon">🔍</div>
+        <div class="admin-stat-value ok">${monthInspections.length}</div>
+        <div class="admin-stat-label">ตรวจเดือนนี้</div>
+      </div>
+      <div class="admin-stat" onclick="location.hash='#/inspections'">
+        <div class="admin-stat-icon">📋</div>
+        <div class="admin-stat-value ok">${inspections.length}</div>
+        <div class="admin-stat-label">ตรวจทั้งหมด</div>
+      </div>
+      <div class="admin-stat" onclick="location.hash='#/penalties'">
+        <div class="admin-stat-icon">⚠️</div>
+        <div class="admin-stat-value ${pendingPenalties.length > 0 ? 'danger' : 'ok'}">${pendingPenalties.length}</div>
+        <div class="admin-stat-label">เตือนค้างดำเนินการ</div>
+      </div>
+    </div>
+
+    <div class="hub-grid">
+      <div class="hub-section">🔍 งานตรวจสอบ</div>
+      <a class="hub-item" href="#/inspections"><div class="hub-icon" style="background:#F0FDF4">🔍</div><span class="hub-label">ตรวจร้าน</span></a>
+      <a class="hub-item" href="#/penalties"><div class="hub-icon" style="background:#FEF2F2">⚠️</div><span class="hub-label">เตือน/ลงโทษ</span></a>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>📋 ผลตรวจล่าสุด</h3></div>
+      ${renderTable([
+        {key:'stall_name',label:'ร้านค้า'},{key:'inspection_date',label:'วันที่ตรวจ',date:true},
+        {key:'score',label:'คะแนน'},{key:'result',label:'ผล',badge:{pass:{text:'ผ่าน',class:'badge-success'},fail:{text:'ไม่ผ่าน',class:'badge-danger'},warning:{text:'เตือน',class:'badge-warning'}}}
+      ], inspections.slice(0, 5))}
+    </div>`;
 }
 
 // ═══════════════════════════════════════════════
