@@ -10,6 +10,7 @@ export async function onRequest(context) {
   if (path.length === 0 && method === 'GET') return listPayments(DB, context.request, user);
   if (path.length === 0 && method === 'POST') return createPayment(DB, context, user);
   if (path.length === 2 && path[1] === 'verify' && method === 'PUT') return verifyPayment(DB, context.request, path[0], user);
+  if (path.length === 1 && method === 'DELETE') return deletePayment(DB, path[0], user);
 
   return Response.json({ error: 'Not found' }, { status: 404 });
 }
@@ -40,6 +41,25 @@ async function listPayments(DB, request, user) {
 
   const { results } = await DB.prepare(sql).bind(...params).all();
   return Response.json({ data: results });
+}
+
+async function deletePayment(DB, id, user) {
+  const payment = await DB.prepare('SELECT * FROM payments WHERE id = ?').bind(id).first();
+  if (!payment) return Response.json({ error: 'ไม่พบรายการชำระ' }, { status: 404 });
+  // stall_owner can only delete own pending/rejected payments
+  if (user.role === 'stall_owner') {
+    if (payment.stall_id !== user.stall_id) return Response.json({ error: 'Forbidden' }, { status: 403 });
+    if (!['pending', 'rejected'].includes(payment.status)) return Response.json({ error: 'ไม่สามารถยกเลิกได้ เนื่องจากสลิปได้รับการตรวจสอบแล้ว' }, { status: 400 });
+  } else if (!['admin', 'staff'].includes(user.role)) {
+    return Response.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  // Delete slip photo if exists
+  if (payment.slip_photo_key) {
+    await DB.prepare('DELETE FROM files WHERE id = ?').bind(payment.slip_photo_key).run();
+  }
+  await DB.prepare('DELETE FROM payments WHERE id = ?').bind(id).run();
+  await auditLog(DB, user.id, 'delete', 'payments', id, { bill_id: payment.bill_id });
+  return Response.json({ ok: true });
 }
 
 async function createPayment(DB, context, user) {

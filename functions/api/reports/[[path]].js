@@ -1,4 +1,4 @@
-/* PPK-Canteen — Reports API */
+﻿/* PPK-Canteen — Reports API */
 export async function onRequest(context) {
   const path = context.params.path || [];
   const method = context.request.method;
@@ -19,20 +19,28 @@ export async function onRequest(context) {
 }
 
 async function dashboardStats(DB) {
-  const [totalStalls, occupiedStalls, pendingPayments, monthlyRevenue, avgInspection, totalRevenue] = await Promise.all([
+  const [totalStalls, occupiedStalls, pendingPayments, monthlyRevenue, avgInspection, totalRevenue, overdueBills, monthlyBills] = await Promise.all([
     DB.prepare('SELECT COUNT(*) as c FROM stalls').first(),
     DB.prepare("SELECT COUNT(*) as c FROM stalls WHERE status = 'occupied'").first(),
     DB.prepare("SELECT COUNT(*) as c FROM payments WHERE status = 'pending'").first(),
     DB.prepare("SELECT COALESCE(SUM(amount),0) as total FROM payments WHERE status = 'verified' AND strftime('%Y-%m', paid_at) = strftime('%Y-%m', 'now')").first(),
     DB.prepare('SELECT ROUND(AVG(score),1) as avg FROM inspections WHERE inspection_date >= date(\'now\', \'-90 days\')').first(),
-    DB.prepare("SELECT COALESCE(SUM(amount),0) as total FROM payments WHERE status = 'verified'").first()
+    DB.prepare("SELECT COALESCE(SUM(amount),0) as total FROM payments WHERE status = 'verified'").first(),
+    DB.prepare("SELECT COUNT(*) as c FROM bills WHERE status = 'overdue'").first(),
+    DB.prepare("SELECT COUNT(*) as total, SUM(CASE WHEN status IN ('paid','verified') THEN 1 ELSE 0 END) as paid FROM bills WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')").first()
   ]);
+
+  const totalBills = monthlyBills.total || 0;
+  const paidBills = monthlyBills.paid || 0;
+  const collectionRate = totalBills > 0 ? Math.round((paidBills / totalBills) * 100) : null;
 
   return Response.json({
     data: {
       total_stalls: totalStalls.c,
       occupied_stalls: occupiedStalls.c,
       pending_payments: pendingPayments.c,
+      overdue_bills: overdueBills.c,
+      collection_rate: collectionRate,
       monthly_revenue: monthlyRevenue.total,
       avg_inspection: avgInspection.avg,
       total_revenue: totalRevenue.total
