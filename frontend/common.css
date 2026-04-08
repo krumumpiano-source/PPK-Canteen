@@ -1270,3 +1270,27 @@ td.right, th.right { text-align: right; }
 @media (max-width: 600px) {
   .my-insp-stats { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ── Inspection Rounds — Create Round Form ── */
+.rnd-count-group { display: flex; gap: 1rem; margin-top: .25rem; }
+.rnd-count-opt { display: flex; align-items: center; gap: .4rem; cursor: pointer; padding: .5rem 1rem; border: 2px solid #e2e8f0; border-radius: 8px; font-weight: 600; transition: all .15s; }
+.rnd-count-opt:has(input:checked) { border-color: var(--primary); background: #eff6ff; color: var(--primary); }
+.rnd-count-opt input { accent-color: var(--primary); }
+.rnd-inspector-list { display: flex; flex-direction: column; gap: .4rem; max-height: 250px; overflow-y: auto; }
+.rnd-inspector-item { display: flex; align-items: center; gap: .6rem; padding: .5rem .75rem; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: all .15s; }
+.rnd-inspector-item:has(input:checked) { border-color: var(--primary); background: #eff6ff; }
+.rnd-inspector-item:has(input:disabled) { opacity: .4; cursor: not-allowed; }
+.rnd-inspector-item input { accent-color: var(--primary); flex-shrink: 0; }
+.rnd-inspector-info { display: flex; flex-direction: column; }
+.rnd-inspector-name { font-weight: 600; font-size: .9rem; }
+.rnd-inspector-phone { font-size: .75rem; color: var(--text-light); }
+
+/* ── Round Detail — Scores per inspector ── */
+.rnd-sub-scores { display: flex; flex-wrap: wrap; gap: .75rem; margin-bottom: 1rem; }
+.rnd-sub-score { display: flex; align-items: center; gap: .4rem; font-size: .85rem; color: #475569; }
+.rnd-agg-count { margin-left: auto; font-size: .75rem; color: #94a3b8; font-weight: 600; white-space: nowrap; }
+
+/* ── Pending/In-progress badges ── */
+.insp-score-circle.pending { background: #f1f5f9; color: #64748b; }
+.insp-result-badge.pending { background: #f1f5f9; color: #64748b; }
+.insp-result-badge.in-progress { background: #dbeafe; color: #1d4ed8; }

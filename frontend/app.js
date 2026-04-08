@@ -500,28 +500,34 @@ async function pgDashboardExec(el, user) {
 
 async function pgDashboardInspector(el, user) {
   const [inspRes, penRes] = await Promise.all([
-    callAPI('GET', '/inspections?limit=10'),
+    callAPI('GET', '/inspections'),
     callAPI('GET', '/penalties?limit=5')
   ]);
-  const inspections = inspRes.data || [];
+  const rounds = inspRes.data || [];
   const penalties = penRes.data || [];
 
-  // Count recent stats
+  const pendingRounds = rounds.filter(r => r.status !== 'completed' && !r.my_submitted);
+  const completedRounds = rounds.filter(r => r.status === 'completed');
   const thisMonth = new Date().toISOString().slice(0, 7);
-  const monthInspections = inspections.filter(i => (i.inspection_date || i.created_at || '').startsWith(thisMonth));
+  const monthCompleted = completedRounds.filter(r => (r.inspection_date || '').startsWith(thisMonth));
   const pendingPenalties = penalties.filter(p => p.status === 'active');
 
   el.innerHTML = `
     <div class="admin-stats">
       <div class="admin-stat" onclick="location.hash='#/inspections'">
+        <div class="admin-stat-icon">⏳</div>
+        <div class="admin-stat-value ${pendingRounds.length > 0 ? 'danger' : 'ok'}">${pendingRounds.length}</div>
+        <div class="admin-stat-label">รอคุณกรอกผล</div>
+      </div>
+      <div class="admin-stat" onclick="location.hash='#/inspections'">
         <div class="admin-stat-icon">🔍</div>
-        <div class="admin-stat-value ok">${monthInspections.length}</div>
-        <div class="admin-stat-label">ตรวจเดือนนี้</div>
+        <div class="admin-stat-value ok">${monthCompleted.length}</div>
+        <div class="admin-stat-label">เสร็จเดือนนี้</div>
       </div>
       <div class="admin-stat" onclick="location.hash='#/inspections'">
         <div class="admin-stat-icon">📋</div>
-        <div class="admin-stat-value ok">${inspections.length}</div>
-        <div class="admin-stat-label">ตรวจทั้งหมด</div>
+        <div class="admin-stat-value ok">${rounds.length}</div>
+        <div class="admin-stat-label">รอบตรวจทั้งหมด</div>
       </div>
       <div class="admin-stat" onclick="location.hash='#/penalties'">
         <div class="admin-stat-icon">⚠️</div>
@@ -536,13 +542,26 @@ async function pgDashboardInspector(el, user) {
       <a class="hub-item" href="#/penalties"><div class="hub-icon" style="background:#FEF2F2">⚠️</div><span class="hub-label">เตือน/ลงโทษ</span></a>
     </div>
 
+    ${pendingRounds.length > 0 ? `
+    <div class="card" style="border-left:4px solid #f59e0b">
+      <div class="card-header"><h3>⏳ รอบตรวจที่รอคุณ</h3></div>
+      <div class="insp-list">
+        ${pendingRounds.slice(0, 5).map(r => {
+          const dateStr = r.inspection_date ? new Date(r.inspection_date).toLocaleDateString('th-TH', {year:'numeric',month:'short',day:'numeric'}) : '-';
+          return `<div class="insp-row" onclick="showInspectorSubmitForm('${r.id}')" style="cursor:pointer">
+            <div class="insp-row-left">
+              <div class="insp-score-circle pending" style="font-size:.9rem">📝</div>
+              <div><div class="insp-row-stall">${escapeHtml(r.stall_name || '-')}</div><div class="insp-row-meta">📅 ${dateStr} · 👥 ${r.inspector_count} คน · ส่ง ${r.submitted_count||0}/${r.inspector_count}</div></div>
+            </div>
+            <div class="insp-row-right"><span class="btn btn-sm btn-primary">📝 กรอกผล</span></div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : `
     <div class="card">
-      <div class="card-header"><h3>📋 ผลตรวจล่าสุด</h3></div>
-      ${renderTable([
-        {key:'stall_name',label:'ร้านค้า'},{key:'inspection_date',label:'วันที่ตรวจ',date:true},
-        {key:'score',label:'คะแนน'},{key:'result',label:'ผล',badge:{pass:{text:'ผ่าน',class:'badge-success'},fail:{text:'ไม่ผ่าน',class:'badge-danger'},warning:{text:'เตือน',class:'badge-warning'}}}
-      ], inspections.slice(0, 5))}
-    </div>`;
+      <div class="card-header"><h3>📋 สถานะ</h3></div>
+      <div style="padding:1.5rem;text-align:center;color:var(--text-light)">✅ ไม่มีรอบตรวจที่รอคุณอยู่ตอนนี้</div>
+    </div>`}`;
 }
 
 // ═══════════════════════════════════════════════
@@ -1100,7 +1119,7 @@ window.cancelReceipt = async function(id) {
 };
 
 // ═══════════════════════════════════════════════
-// INSPECTIONS (ตรวจสุขอนามัย)
+// INSPECTIONS (ตรวจสุขอนามัย — ระบบคณะกรรมการ)
 // ═══════════════════════════════════════════════
 // ── Inspection Checklist (อ้างอิง กฎกระทรวงสุขลักษณะสถานที่จำหน่ายอาหาร พ.ศ.2561 + มาตรฐาน Clean Food Good Taste กรมอนามัย) ──
 const INSPECTION_CHECKLIST = [
@@ -1151,52 +1170,91 @@ async function pgInspections() {
   const el = document.getElementById('content');
   const res = await callAPI('GET', '/inspections');
   const user = getCurrentUser();
-  const canInspect = ['admin','inspector'].includes(user.role);
-  const inspections = res.data || [];
+  const isAdmin = user.role === 'admin';
+  const isInspector = user.role === 'inspector';
+  const rounds = res.data || [];
 
-  // Stats
-  const total = inspections.length;
-  const passCount = inspections.filter(i => i.result === 'pass').length;
-  const warnCount = inspections.filter(i => i.result === 'warning').length;
-  const failCount = inspections.filter(i => i.result === 'fail').length;
-  const avgScore = total ? (inspections.reduce((s, i) => s + (i.score || 0), 0) / total).toFixed(1) : '-';
+  // Stats from completed rounds
+  const completed = rounds.filter(r => r.status === 'completed');
+  const total = completed.length;
+  const passCount = completed.filter(r => r.result === 'pass').length;
+  const warnCount = completed.filter(r => r.result === 'warning').length;
+  const failCount = completed.filter(r => r.result === 'fail').length;
+  const avgScore = total ? (completed.reduce((s, r) => s + (r.score || 0), 0) / total).toFixed(1) : '-';
+
+  // For inspector: pending rounds they haven't submitted yet
+  const pendingForMe = isInspector ? rounds.filter(r => r.status !== 'completed' && !r.my_submitted) : [];
+
+  let pendingHTML = '';
+  if (isInspector && pendingForMe.length > 0) {
+    pendingHTML = `
+    <div class="card" style="margin-bottom:1rem;border-left:4px solid #f59e0b">
+      <div class="card-header"><h3>⏳ รอบตรวจที่รอคุณกรอกผล</h3></div>
+      <div class="insp-list">
+        ${pendingForMe.map(r => {
+          const dateStr = r.inspection_date ? new Date(r.inspection_date).toLocaleDateString('th-TH', {year:'numeric',month:'short',day:'numeric'}) : '-';
+          return `
+          <div class="insp-row" onclick="showInspectorSubmitForm('${r.id}')" style="cursor:pointer">
+            <div class="insp-row-left">
+              <div class="insp-score-circle pending" style="font-size:.9rem">📝</div>
+              <div>
+                <div class="insp-row-stall">${escapeHtml(r.stall_name || '-')}</div>
+                <div class="insp-row-meta">📅 ${dateStr} · 👥 ผู้ตรวจ ${r.inspector_count} คน · ส่งแล้ว ${r.submitted_count || 0}/${r.inspector_count}</div>
+              </div>
+            </div>
+            <div class="insp-row-right">
+              <span class="btn btn-sm btn-primary">📝 กรอกผลตรวจ</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
 
   el.innerHTML = `
     <div class="page-header">
       <div>
         <h1>🔍 ตรวจสุขอนามัยร้านอาหาร</h1>
-        <p style="margin:0;font-size:.85rem;color:var(--text-light)">อ้างอิง กฎกระทรวงสุขลักษณะสถานที่จำหน่ายอาหาร พ.ศ.2561 + มาตรฐาน Clean Food Good Taste กรมอนามัย</p>
+        <p style="margin:0;font-size:.85rem;color:var(--text-light)">ระบบคณะกรรมการตรวจ (3-5 คน) คิดคะแนนเฉลี่ย · อ้างอิง กฎกระทรวงฯ พ.ศ.2561 + Clean Food Good Taste</p>
       </div>
-      ${canInspect ? '<button class="btn btn-primary" onclick="showInspectionForm()">📝 เริ่มตรวจร้าน</button>' : ''}
+      ${isAdmin ? '<button class="btn btn-primary" onclick="showCreateRoundForm()">📝 สร้างรอบตรวจ</button>' : ''}
     </div>
 
     <div class="insp-stats">
-      <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#EEF2FF;color:#4F46E5">📊</div><div class="insp-stat-val">${total}</div><div class="insp-stat-lbl">ตรวจทั้งหมด</div></div>
+      <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#EEF2FF;color:#4F46E5">📊</div><div class="insp-stat-val">${total}</div><div class="insp-stat-lbl">ตรวจเสร็จ</div></div>
       <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#F0FDF4;color:#059669">✅</div><div class="insp-stat-val">${passCount}</div><div class="insp-stat-lbl">ผ่าน</div></div>
       <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#FFFBEB;color:#D97706">⚠️</div><div class="insp-stat-val">${warnCount}</div><div class="insp-stat-lbl">เตือน</div></div>
       <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#FEF2F2;color:#DC2626">❌</div><div class="insp-stat-val">${failCount}</div><div class="insp-stat-lbl">ไม่ผ่าน</div></div>
       <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#F5F3FF;color:#7C3AED">🎯</div><div class="insp-stat-val">${avgScore}</div><div class="insp-stat-lbl">คะแนนเฉลี่ย</div></div>
     </div>
 
+    ${pendingHTML}
+
     <div class="card">
-      <div class="card-header"><h3>📋 ประวัติการตรวจ</h3></div>
-      ${inspections.length === 0 ? '<div style="padding:2rem;text-align:center;color:var(--text-light)">ยังไม่มีข้อมูลการตรวจ</div>' : `
+      <div class="card-header"><h3>📋 รอบตรวจทั้งหมด</h3></div>
+      ${rounds.length === 0 ? '<div style="padding:2rem;text-align:center;color:var(--text-light)">ยังไม่มีรอบตรวจ</div>' : `
       <div class="insp-list">
-        ${inspections.map(insp => {
-          const scoreClass = insp.result === 'pass' ? 'pass' : insp.result === 'warning' ? 'warn' : 'fail';
-          const resultLabel = insp.result === 'pass' ? '✅ ผ่าน' : insp.result === 'warning' ? '⚠️ เตือน' : '❌ ไม่ผ่าน';
-          const dateStr = insp.inspection_date ? new Date(insp.inspection_date).toLocaleDateString('th-TH', { year:'numeric', month:'short', day:'numeric' }) : '-';
+        ${rounds.map(r => {
+          const scoreClass = r.result === 'pass' ? 'pass' : r.result === 'warning' ? 'warn' : r.result === 'fail' ? 'fail' : '';
+          const statusMap = {
+            pending: '⏳ รอผู้ตรวจ',
+            in_progress: '🔄 ตรวจ ' + (r.submitted_count||0) + '/' + r.inspector_count,
+            completed: r.result === 'pass' ? '✅ ผ่าน' : r.result === 'warning' ? '⚠️ เตือน' : '❌ ไม่ผ่าน'
+          };
+          const badgeClass = r.status === 'completed' ? scoreClass : (r.status === 'in_progress' ? 'in-progress' : 'pending');
+          const dateStr = r.inspection_date ? new Date(r.inspection_date).toLocaleDateString('th-TH', {year:'numeric',month:'short',day:'numeric'}) : '-';
+          const displayScore = r.status === 'completed' ? Math.round(r.score || 0) : '-';
           return `
-          <div class="insp-row" onclick="showInspectionDetail('${insp.id}')">
+          <div class="insp-row" onclick="showRoundDetail('${r.id}')">
             <div class="insp-row-left">
-              <div class="insp-score-circle ${scoreClass}">${insp.score || 0}</div>
+              <div class="insp-score-circle ${scoreClass || 'pending'}">${displayScore}</div>
               <div>
-                <div class="insp-row-stall">${escapeHtml(insp.stall_name || '-')}</div>
-                <div class="insp-row-meta">📅 ${dateStr} · 👤 ${escapeHtml(insp.inspector_name || '-')}</div>
+                <div class="insp-row-stall">${escapeHtml(r.stall_name || '-')}</div>
+                <div class="insp-row-meta">📅 ${dateStr} · 👥 ผู้ตรวจ ${r.inspector_count} คน${r.status !== 'completed' ? ' · ส่งแล้ว ' + (r.submitted_count||0) + '/' + r.inspector_count : ''}</div>
               </div>
             </div>
             <div class="insp-row-right">
-              <span class="insp-result-badge ${scoreClass}">${resultLabel}</span>
+              <span class="insp-result-badge ${badgeClass}">${statusMap[r.status] || r.status}</span>
             </div>
           </div>`;
         }).join('')}
@@ -1204,11 +1262,90 @@ async function pgInspections() {
     </div>`;
 }
 
-window.showInspectionForm = async function() {
-  const stallsRes = await callAPI('GET', '/stalls?status=occupied');
+// ── Admin: Create inspection round ──
+window.showCreateRoundForm = async function() {
+  const [stallsRes, usersRes] = await Promise.all([
+    callAPI('GET', '/stalls?status=occupied'),
+    callAPI('GET', '/users')
+  ]);
   const stalls = stallsRes.data || [];
+  const inspectors = (usersRes.data || []).filter(u => u.role === 'inspector' && u.is_active);
   const stallOpts = stalls.map(s => `<option value="${s.id}">${escapeHtml(s.name || s.zone + '-' + s.number)}</option>`).join('');
 
+  showModal(`
+    <div class="modal-header"><h2>📝 สร้างรอบตรวจสุขอนามัย</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <form id="round-form" onsubmit="saveRound(event)">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group"><label>🏪 ร้านค้า *</label><select class="form-select" name="stall_id" required><option value="">-- เลือกร้าน --</option>${stallOpts}</select></div>
+          <div class="form-group"><label>📅 วันที่ตรวจ *</label><input type="date" class="form-input" name="inspection_date" value="${new Date().toISOString().split('T')[0]}" required></div>
+        </div>
+        <div class="form-group">
+          <label>👥 จำนวนผู้ตรวจ *</label>
+          <div class="rnd-count-group">
+            <label class="rnd-count-opt"><input type="radio" name="inspector_count" value="3" checked onchange="updateInspectorPicker()"> <span>3 คน</span></label>
+            <label class="rnd-count-opt"><input type="radio" name="inspector_count" value="5" onchange="updateInspectorPicker()"> <span>5 คน</span></label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>🔍 เลือกผู้ตรวจ * <span id="inspector-count-label" style="font-weight:400;color:var(--text-light)">(เลือก 0/3)</span></label>
+          ${inspectors.length === 0 ? '<div style="color:#dc2626;font-size:.9rem">⚠️ ยังไม่มีผู้ตรวจในระบบ กรุณาเพิ่มผู้ใช้ที่มีบทบาท "ผู้ตรวจ" ก่อน</div>' : `
+          <div class="rnd-inspector-list" id="rnd-inspectors">
+            ${inspectors.map(u => `
+              <label class="rnd-inspector-item">
+                <input type="checkbox" name="inspector_ids" value="${u.id}" onchange="updateInspectorPicker()">
+                <div class="rnd-inspector-info">
+                  <span class="rnd-inspector-name">${escapeHtml(u.name)}</span>
+                  <span class="rnd-inspector-phone">${escapeHtml(u.phone || '')}</span>
+                </div>
+              </label>
+            `).join('')}
+          </div>`}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+        <button type="submit" class="btn btn-primary" id="round-submit-btn">📋 สร้างรอบตรวจ</button>
+      </div>
+    </form>`);
+};
+
+window.updateInspectorPicker = function() {
+  const form = document.getElementById('round-form');
+  if (!form) return;
+  const count = parseInt(form.querySelector('[name="inspector_count"]:checked')?.value || '3');
+  const checked = form.querySelectorAll('[name="inspector_ids"]:checked');
+  const label = document.getElementById('inspector-count-label');
+  if (label) label.textContent = `(เลือก ${checked.length}/${count})`;
+  form.querySelectorAll('[name="inspector_ids"]').forEach(cb => {
+    if (!cb.checked) cb.disabled = checked.length >= count;
+  });
+};
+
+window.saveRound = async function(e) {
+  e.preventDefault();
+  const fd = getFormData(e.target);
+  const count = parseInt(fd.inspector_count || '3');
+  const checkedBoxes = e.target.querySelectorAll('[name="inspector_ids"]:checked');
+  const inspectorIds = Array.from(checkedBoxes).map(cb => cb.value);
+  if (inspectorIds.length !== count) {
+    return toast(`กรุณาเลือกผู้ตรวจ ${count} คน (ตอนนี้เลือก ${inspectorIds.length} คน)`, 'error');
+  }
+  const btn = document.getElementById('round-submit-btn');
+  btn.disabled = true; btn.textContent = 'กำลังสร้าง...';
+  const res = await callAPI('POST', '/inspections', {
+    stall_id: fd.stall_id,
+    inspection_date: fd.inspection_date,
+    inspector_count: count,
+    inspector_ids: inspectorIds
+  });
+  if (res.error) { toast(res.error, 'error'); btn.disabled = false; btn.textContent = '📋 สร้างรอบตรวจ'; return; }
+  toast('สร้างรอบตรวจสำเร็จ แจ้งผู้ตรวจทุกคนแล้ว', 'success');
+  closeModal(); pgInspections();
+};
+
+// ── Inspector: Fill checklist for assigned round ──
+window.showInspectorSubmitForm = async function(roundId) {
   const checklistHTML = INSPECTION_CHECKLIST.map((cat, ci) => `
     <div class="insp-cat">
       <div class="insp-cat-header" onclick="this.parentElement.classList.toggle('collapsed')">
@@ -1227,32 +1364,25 @@ window.showInspectionForm = async function() {
   `).join('');
 
   showModal(`
-    <div class="modal-header"><h2>📝 ตรวจสุขอนามัยร้านค้า</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
-    <form id="insp-form" onsubmit="saveInspection(event)">
+    <div class="modal-header"><h2>📝 กรอกผลตรวจสุขอนามัย</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <form id="insp-form" onsubmit="submitMyInspection(event,'${roundId}')">
       <div class="modal-body" style="max-height:70vh;overflow-y:auto">
-        <div class="form-row">
-          <div class="form-group"><label>🏪 ร้านค้า *</label><select class="form-select" name="stall_id" required><option value="">-- เลือกร้าน --</option>${stallOpts}</select></div>
-          <div class="form-group"><label>📅 วันที่ตรวจ *</label><input type="date" class="form-input" name="inspection_date" value="${new Date().toISOString().split('T')[0]}" required></div>
-        </div>
-
         <div class="insp-score-display">
           <div class="insp-score-big" id="insp-live-score">0</div>
           <div class="insp-score-label">คะแนน / 100</div>
           <div class="insp-score-bar"><div class="insp-score-fill" id="insp-score-fill" style="width:0%"></div></div>
           <div class="insp-score-result" id="insp-live-result">ยังไม่ได้ตรวจ</div>
         </div>
-
         <div class="insp-checklist-title">📋 รายการตรวจ (${INSPECTION_TOTAL_ITEMS} ข้อ) — กดเลือกข้อที่ <strong>ผ่าน</strong></div>
         ${checklistHTML}
-
         <div class="form-group" style="margin-top:1rem">
           <label>📝 หมายเหตุ / ข้อสังเกต</label>
-          <textarea class="form-input" name="notes" rows="3" placeholder="ระบุรายละเอียดเพิ่มเติม เช่น เรื่องที่ต้องแก้ไข จุดเสี่ยงที่พบ"></textarea>
+          <textarea class="form-input" name="notes" rows="3" placeholder="ระบุรายละเอียดเพิ่มเติม"></textarea>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
-        <button type="submit" class="btn btn-primary" id="insp-submit-btn">💾 บันทึกผลตรวจ</button>
+        <button type="submit" class="btn btn-primary" id="insp-submit-btn">💾 ส่งผลตรวจ</button>
       </div>
     </form>`, {large:true});
 };
@@ -1261,8 +1391,7 @@ window.updateInspScore = function() {
   const form = document.getElementById('insp-form');
   if (!form) return;
   const checks = form.querySelectorAll('[name^="chk_"]');
-  let passed = 0, total = checks.length;
-  // Per-category counts
+  let passed = 0;
   const catCounts = {};
   checks.forEach(cb => {
     const ci = cb.dataset.cat;
@@ -1270,7 +1399,7 @@ window.updateInspScore = function() {
     catCounts[ci].total++;
     if (cb.checked) { passed++; catCounts[ci].pass++; }
   });
-  const score = total ? Math.round((passed / total) * 100) : 0;
+  const score = checks.length ? Math.round((passed / checks.length) * 100) : 0;
   const scoreEl = document.getElementById('insp-live-score');
   const fillEl = document.getElementById('insp-score-fill');
   const resultEl = document.getElementById('insp-live-result');
@@ -1285,7 +1414,6 @@ window.updateInspScore = function() {
     else if (score >= 50) { resultEl.textContent = '⚠️ ต้องปรับปรุง'; resultEl.className = 'insp-score-result warn'; }
     else { resultEl.textContent = '❌ ไม่ผ่านเกณฑ์'; resultEl.className = 'insp-score-result fail'; }
   }
-  // Update per-category counts
   for (const ci in catCounts) {
     const el = document.getElementById('cat-count-' + ci);
     if (el) {
@@ -1295,9 +1423,8 @@ window.updateInspScore = function() {
   }
 };
 
-window.saveInspection = async function(e) {
+window.submitMyInspection = async function(e, roundId) {
   e.preventDefault();
-  const fd = getFormData(e.target);
   const checks = e.target.querySelectorAll('[name^="chk_"]');
   const results = [];
   checks.forEach(cb => {
@@ -1312,60 +1439,125 @@ window.saveInspection = async function(e) {
   const totalItems = results.length;
   const passedItems = results.filter(r => r.passed).length;
   const score = totalItems ? Math.round((passedItems / totalItems) * 100) : 0;
-
   const data = {
-    stall_id: fd.stall_id,
-    inspection_date: fd.inspection_date,
-    score: score,
+    score,
     checklist_json: JSON.stringify(results),
-    notes: fd.notes,
+    notes: getFormData(e.target).notes,
     result: score >= 80 ? 'pass' : score >= 50 ? 'warning' : 'fail'
   };
-
   const btn = document.getElementById('insp-submit-btn');
-  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
-
-  const res = await callAPI('POST', '/inspections', data);
-  if (res.error) { toast(res.error, 'error'); btn.disabled = false; btn.textContent = '💾 บันทึกผลตรวจ'; return; }
+  btn.disabled = true; btn.textContent = 'กำลังส่ง...';
+  const res = await callAPI('POST', '/inspections/' + roundId + '/submit', data);
+  if (res.error) { toast(res.error, 'error'); btn.disabled = false; btn.textContent = '💾 ส่งผลตรวจ'; return; }
   const resultText = data.result === 'pass' ? 'ผ่าน ✅' : data.result === 'warning' ? 'ต้องปรับปรุง ⚠️' : 'ไม่ผ่าน ❌';
-  toast(`บันทึกผลตรวจสำเร็จ: ${score}/100 — ${resultText}`, data.result === 'pass' ? 'success' : 'warning');
+  let msg = `ส่งผลตรวจสำเร็จ: ${score}/100 — ${resultText}`;
+  if (res.data?.round_completed) msg += '\nผู้ตรวจครบแล้ว — ระบบคำนวณคะแนนเฉลี่ยเรียบร้อย ✅';
+  toast(msg, data.result === 'pass' ? 'success' : 'warning');
   closeModal(); pgInspections();
 };
 
-window.showInspectionDetail = async function(id) {
-  const res = await callAPI('GET', '/inspections/' + id);
-  const insp = res.data || {};
-  let checklist = [];
-  try { checklist = JSON.parse(insp.checklist_json || '[]'); } catch {}
-  const dateStr = insp.inspection_date ? new Date(insp.inspection_date).toLocaleDateString('th-TH', { year:'numeric', month:'long', day:'numeric' }) : '-';
-  const scoreClass = insp.result === 'pass' ? 'pass' : insp.result === 'warning' ? 'warn' : 'fail';
-  const resultLabel = insp.result === 'pass' ? '✅ ผ่านเกณฑ์' : insp.result === 'warning' ? '⚠️ ต้องปรับปรุง' : '❌ ไม่ผ่านเกณฑ์';
+// ── Round Detail (aggregated, anonymous) ──
+window.showRoundDetail = async function(id) {
+  if (!id.startsWith('RND-')) return showOldInspectionDetail(id);
 
-  // Group checklist by category
-  const catMap = {};
-  checklist.forEach(c => {
-    const cat = c.category || 'อื่นๆ';
-    if (!catMap[cat]) catMap[cat] = [];
-    catMap[cat].push(c);
+  const res = await callAPI('GET', '/inspections/' + id);
+  const round = res.data || {};
+  const submissions = round.submissions || [];
+  const dateStr = round.inspection_date ? new Date(round.inspection_date).toLocaleDateString('th-TH', {year:'numeric',month:'long',day:'numeric'}) : '-';
+  const scoreClass = round.result === 'pass' ? 'pass' : round.result === 'warning' ? 'warn' : round.result === 'fail' ? 'fail' : '';
+  const resultLabel = round.result === 'pass' ? '✅ ผ่านเกณฑ์' : round.result === 'warning' ? '⚠️ ต้องปรับปรุง' : round.result === 'fail' ? '❌ ไม่ผ่านเกณฑ์' : '⏳ รอผลตรวจ';
+
+  // Score breakdown per anonymous inspector
+  const scoreListHTML = submissions.map((s, i) => {
+    const sc = s.score || 0;
+    const scClass = sc >= 80 ? 'pass' : sc >= 50 ? 'warn' : 'fail';
+    return `<div class="rnd-sub-score"><div class="insp-score-circle ${scClass}" style="width:36px;height:36px;font-size:.8rem">${sc}</div><span>คนที่ ${i + 1}</span></div>`;
+  }).join('');
+
+  // Aggregate checklist across all submissions
+  const catAgg = {};
+  submissions.forEach(s => {
+    let cl = []; try { cl = JSON.parse(s.checklist_json || '[]'); } catch {}
+    cl.forEach(c => {
+      const cat = c.category || 'อื่นๆ';
+      if (!catAgg[cat]) catAgg[cat] = {};
+      if (!catAgg[cat][c.item]) catAgg[cat][c.item] = { pass: 0, total: 0 };
+      catAgg[cat][c.item].total++;
+      if (c.passed) catAgg[cat][c.item].pass++;
+    });
   });
 
-  const failedItems = checklist.filter(c => !c.passed);
+  // Items not passed by all inspectors
+  const failedAgg = [];
+  Object.values(catAgg).forEach(items => {
+    Object.entries(items).forEach(([item, counts]) => {
+      if (counts.pass < counts.total) failedAgg.push({ item, ...counts });
+    });
+  });
 
-  const catHTML = Object.entries(catMap).map(([cat, items]) => {
-    const catPass = items.filter(i => i.passed).length;
+  const aggHTML = Object.entries(catAgg).map(([cat, items]) => {
+    const allItems = Object.entries(items);
+    const catPass = allItems.filter(([,v]) => v.pass === v.total).length;
     return `
       <div class="insp-detail-cat">
         <div class="insp-detail-cat-head">
           <span>${escapeHtml(cat)}</span>
-          <span class="insp-cat-count ${catPass === items.length ? 'all-pass' : ''}">${catPass}/${items.length}</span>
+          <span class="insp-cat-count ${catPass === allItems.length ? 'all-pass' : ''}">${catPass}/${allItems.length}</span>
         </div>
-        ${items.map(c => `
-          <div class="insp-detail-item ${c.passed ? 'pass' : 'fail'}">
-            <span>${c.passed ? '✅' : '❌'}</span>
-            <span>${escapeHtml(c.item || '')}</span>
-          </div>
-        `).join('')}
+        ${allItems.map(([item, counts]) => {
+          const allPass = counts.pass === counts.total;
+          return `<div class="insp-detail-item ${allPass ? 'pass' : 'fail'}">
+            <span>${allPass ? '✅' : '❌'}</span>
+            <span>${escapeHtml(item)}</span>
+            <span class="rnd-agg-count">${counts.pass}/${counts.total}</span>
+          </div>`;
+        }).join('')}
       </div>`;
+  }).join('');
+
+  showModal(`
+    <div class="modal-header"><h2>ผลตรวจสุขอนามัย (คณะกรรมการ)</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+      <div class="insp-detail-header">
+        <div class="insp-score-circle ${scoreClass}" style="width:64px;height:64px;font-size:1.3rem">${round.status === 'completed' ? Math.round(round.avg_score || 0) : '-'}</div>
+        <div>
+          <div style="font-size:1.1rem;font-weight:700">${escapeHtml(round.stall_name || '-')}</div>
+          <div style="font-size:.9rem;color:var(--text-light)">📅 ${dateStr} · 👥 ผู้ตรวจ ${round.inspector_count} คน</div>
+          <div class="insp-result-badge ${scoreClass}" style="margin-top:.3rem">${resultLabel}</div>
+        </div>
+      </div>
+      <div style="margin-bottom:1rem">
+        <div style="font-weight:600;margin-bottom:.5rem">📊 คะแนนรายบุคคล (${submissions.length}/${round.inspector_count} คน)</div>
+        <div class="rnd-sub-scores">${scoreListHTML || '<div style="color:var(--text-light);font-size:.9rem">ยังไม่มีผู้ตรวจส่งผล</div>'}</div>
+      </div>
+      ${failedAgg.length > 0 ? `
+      <div class="insp-fail-summary">
+        <div style="font-weight:700;margin-bottom:.5rem">❌ ข้อที่ไม่ผ่านครบทุกคน (${failedAgg.length} ข้อ)</div>
+        ${failedAgg.map(f => `<div class="insp-fail-item">• ${escapeHtml(f.item)} (ผ่าน ${f.pass}/${f.total} คน)</div>`).join('')}
+      </div>` : ''}
+      ${round.notes ? `<div style="background:#f8fafc;padding:.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.9rem"><strong>📝 หมายเหตุ:</strong> ${escapeHtml(round.notes)}</div>` : ''}
+      ${aggHTML ? `<div style="font-weight:700;margin-bottom:.5rem">📋 รายการตรวจทั้งหมด (รวมผลทุกคน)</div>${aggHTML}` : ''}
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">ปิด</button></div>
+  `, {large:true});
+};
+
+// ── Legacy: Old individual inspection detail (no inspector name) ──
+window.showOldInspectionDetail = async function(id) {
+  const res = await callAPI('GET', '/inspections/' + id);
+  const insp = res.data || {};
+  let checklist = []; try { checklist = JSON.parse(insp.checklist_json || '[]'); } catch {}
+  const dateStr = insp.inspection_date ? new Date(insp.inspection_date).toLocaleDateString('th-TH', {year:'numeric',month:'long',day:'numeric'}) : '-';
+  const scoreClass = insp.result === 'pass' ? 'pass' : insp.result === 'warning' ? 'warn' : 'fail';
+  const resultLabel = insp.result === 'pass' ? '✅ ผ่านเกณฑ์' : insp.result === 'warning' ? '⚠️ ต้องปรับปรุง' : '❌ ไม่ผ่านเกณฑ์';
+
+  const catMap = {};
+  checklist.forEach(c => { const cat = c.category || 'อื่นๆ'; if (!catMap[cat]) catMap[cat] = []; catMap[cat].push(c); });
+  const failedItems = checklist.filter(c => !c.passed);
+
+  const catHTML = Object.entries(catMap).map(([cat, items]) => {
+    const catPass = items.filter(i => i.passed).length;
+    return `<div class="insp-detail-cat"><div class="insp-detail-cat-head"><span>${escapeHtml(cat)}</span><span class="insp-cat-count ${catPass === items.length ? 'all-pass' : ''}">${catPass}/${items.length}</span></div>${items.map(c => `<div class="insp-detail-item ${c.passed ? 'pass' : 'fail'}"><span>${c.passed ? '✅' : '❌'}</span><span>${escapeHtml(c.item || '')}</span></div>`).join('')}</div>`;
   }).join('');
 
   showModal(`
@@ -1375,18 +1567,13 @@ window.showInspectionDetail = async function(id) {
         <div class="insp-score-circle ${scoreClass}" style="width:64px;height:64px;font-size:1.3rem">${insp.score || 0}</div>
         <div>
           <div style="font-size:1.1rem;font-weight:700">${escapeHtml(insp.stall_name || '-')}</div>
-          <div style="font-size:.9rem;color:var(--text-light)">📅 ${dateStr} · 👤 ${escapeHtml(insp.inspector_name || '-')}</div>
+          <div style="font-size:.9rem;color:var(--text-light)">📅 ${dateStr}</div>
           <div class="insp-result-badge ${scoreClass}" style="margin-top:.3rem">${resultLabel}</div>
         </div>
       </div>
-      ${failedItems.length > 0 ? `
-      <div class="insp-fail-summary">
-        <div style="font-weight:700;margin-bottom:.5rem">❌ ข้อที่ไม่ผ่าน (${failedItems.length} ข้อ)</div>
-        ${failedItems.map(c => `<div class="insp-fail-item">• ${escapeHtml(c.item || '')}</div>`).join('')}
-      </div>` : ''}
+      ${failedItems.length > 0 ? `<div class="insp-fail-summary"><div style="font-weight:700;margin-bottom:.5rem">❌ ข้อที่ไม่ผ่าน (${failedItems.length} ข้อ)</div>${failedItems.map(c => `<div class="insp-fail-item">• ${escapeHtml(c.item || '')}</div>`).join('')}</div>` : ''}
       ${insp.notes ? `<div style="background:#f8fafc;padding:.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.9rem"><strong>📝 หมายเหตุ:</strong> ${escapeHtml(insp.notes)}</div>` : ''}
-      <div style="font-weight:700;margin-bottom:.5rem">📋 รายการตรวจทั้งหมด</div>
-      ${catHTML}
+      ${catHTML ? `<div style="font-weight:700;margin-bottom:.5rem">📋 รายการตรวจทั้งหมด</div>${catHTML}` : ''}
     </div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">ปิด</button></div>
   `, {large:true});
@@ -3111,7 +3298,7 @@ async function pgMyInspections() {
     <div class="page-header">
       <div>
         <h1>🔍 ผลตรวจสุขอนามัย</h1>
-        <p style="margin:0;font-size:.85rem;color:var(--text-light)">ประวัติผลการตรวจสุขอนามัยร้านค้าของคุณ</p>
+        <p style="margin:0;font-size:.85rem;color:var(--text-light)">ประวัติผลการตรวจสุขอนามัยร้านค้าของคุณ (โดยคณะกรรมการ)</p>
       </div>
     </div>
 
@@ -3127,10 +3314,10 @@ async function pgMyInspections() {
     <div class="my-insp-latest ${latestClass}">
       <div class="my-insp-latest-label">ผลตรวจล่าสุด</div>
       <div class="my-insp-latest-score">
-        <div class="insp-score-circle ${latestClass}" style="width:56px;height:56px;font-size:1.2rem">${inspections[0].score || 0}</div>
+        <div class="insp-score-circle ${latestClass}" style="width:56px;height:56px;font-size:1.2rem">${Math.round(inspections[0].score || 0)}</div>
         <div>
           <div class="insp-result-badge ${latestClass}">${latestLabel}</div>
-          <div style="font-size:.8rem;color:var(--text-light);margin-top:.25rem">📅 ${inspections[0].inspection_date ? new Date(inspections[0].inspection_date).toLocaleDateString('th-TH', { year:'numeric', month:'short', day:'numeric' }) : '-'}</div>
+          <div style="font-size:.8rem;color:var(--text-light);margin-top:.25rem">📅 ${inspections[0].inspection_date ? new Date(inspections[0].inspection_date).toLocaleDateString('th-TH', { year:'numeric', month:'short', day:'numeric' }) : '-'}${inspections[0].inspector_count ? ' · 👥 ผู้ตรวจ ' + inspections[0].inspector_count + ' คน' : ''}</div>
         </div>
       </div>
     </div>` : ''}
@@ -3144,12 +3331,12 @@ async function pgMyInspections() {
           const resultLabel = insp.result === 'pass' ? '✅ ผ่าน' : insp.result === 'warning' ? '⚠️ เตือน' : '❌ ไม่ผ่าน';
           const dateStr = insp.inspection_date ? new Date(insp.inspection_date).toLocaleDateString('th-TH', { year:'numeric', month:'short', day:'numeric' }) : '-';
           return `
-          <div class="insp-row" onclick="showInspectionDetail('${insp.id}')">
+          <div class="insp-row" onclick="showRoundDetail('${insp.id}')">
             <div class="insp-row-left">
-              <div class="insp-score-circle ${scoreClass}">${insp.score || 0}</div>
+              <div class="insp-score-circle ${scoreClass}">${Math.round(insp.score || 0)}</div>
               <div>
-                <div class="insp-row-stall">คะแนน ${insp.score || 0}/100</div>
-                <div class="insp-row-meta">📅 ${dateStr} · 👤 ${escapeHtml(insp.inspector_name || '-')}</div>
+                <div class="insp-row-stall">คะแนนเฉลี่ย ${Math.round(insp.score || 0)}/100</div>
+                <div class="insp-row-meta">📅 ${dateStr}${insp.inspector_count ? ' · 👥 ผู้ตรวจ ' + insp.inspector_count + ' คน' : ''}</div>
               </div>
             </div>
             <div class="insp-row-right">
