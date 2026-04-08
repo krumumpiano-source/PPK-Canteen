@@ -1756,26 +1756,95 @@ async function pgNotifyBills() {
   const curMonth = now.getMonth() + 1;
   const curYear = now.getFullYear() + 543;
   const monthOpts = THAI_MONTHS.map((m,i) => `<option value="${i+1}" ${(i+1)===curMonth?'selected':''}>${m}</option>`).join('');
+  const todayISO = now.toISOString().split('T')[0];
 
   el.innerHTML = `
+    <style>
+      .nb-section{background:#ecfdf5;border-radius:14px;padding:1.5rem;margin-bottom:1rem;box-shadow:0 2px 12px rgba(0,0,0,0.03);width:100%;border:1px solid #a7f3d0}
+      .nb-section-title{font-size:1.1rem;font-weight:700;color:#059669;margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;border-bottom:2px solid #a7f3d0;padding-bottom:.5rem}
+      .nb-info{background:#d1fae5;border:1px solid #a7f3d0;border-radius:8px;padding:.8rem 1rem;margin-bottom:1rem;color:#065f46;font-size:.9rem;display:flex;align-items:center;gap:.5rem}
+      .nb-capture{width:100%;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.06)}
+      .nb-capture-header{background:linear-gradient(135deg,#10b981,#059669);color:#fff;text-align:center;padding:.9rem 1rem;font-size:1.2rem;font-weight:700;letter-spacing:.5px}
+      .nb-tbl{width:100%;border-collapse:collapse;background:#fff;font-size:.92rem}
+      .nb-tbl th{background:linear-gradient(135deg,#d1fae5,#a7f3d0);color:#065f46;padding:.65rem .5rem;font-weight:700;text-align:center;border:1px solid #86efac;white-space:nowrap}
+      .nb-tbl td{padding:.55rem .5rem;border:1px solid #d1fae5;text-align:center;vertical-align:middle}
+      .nb-tbl tr:nth-child(even){background:#f0fdf4}
+      .nb-tbl tr:hover{background:#dcfce7}
+      .nb-tbl .col-name{min-width:140px;text-align:left;padding-left:.8rem}
+      .nb-money{font-weight:700;color:#059669}
+      .nb-total{font-weight:700;color:#b45309;font-size:1.05rem}
+      .nb-footer{background:#fffbeb;color:#92400e;text-align:center;padding:.6rem;font-size:.85rem;border-top:1px solid #fde68a}
+      .nb-common-cell{display:inline-flex;align-items:center;gap:5px}
+      .nb-common-val{font-weight:700;color:#059669;min-width:45px;text-align:right;display:inline-block}
+      .nb-common-val.editable{cursor:pointer;border-bottom:1px dashed #94a3b8}
+      .nb-common-val.editable:hover{color:#2563eb;border-color:#2563eb}
+      .nb-exempt-btn{padding:2px 7px;border-radius:6px;border:1.5px solid #fca5a5;background:#fff1f2;color:#ef4444;font-size:.75rem;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap;line-height:1.6}
+      .nb-exempt-btn:hover{background:#fecaca;border-color:#f87171}
+      .nb-exempt-btn.exempted{background:#dcfce7;color:#16a34a;border-color:#86efac}
+      .nb-exempt-btn.exempted:hover{background:#bbf7d0}
+      .nb-exempted-row .nb-common-val{color:#9ca3af;text-decoration:line-through}
+      .nb-edit-input{width:58px;padding:1px 4px;border:1.5px solid #3b82f6;border-radius:5px;font-size:.9rem;font-family:inherit;text-align:center;font-weight:700;color:#1e40af;outline:none}
+      .nb-edit-input:focus{box-shadow:0 0 0 2px rgba(59,130,246,.3)}
+      .nb-btn{border-radius:10px;font-size:1rem;font-weight:700;padding:.7rem 1.8rem;border:none;cursor:pointer;box-shadow:0 4px 6px rgba(0,0,0,.06);transition:transform .2s,box-shadow .2s;font-family:inherit;display:inline-flex;align-items:center;gap:.5rem}
+      .nb-btn:hover{transform:translateY(-2px);box-shadow:0 6px 8px rgba(0,0,0,.15)}
+      .nb-btn:active{transform:translateY(0)}
+      .nb-btn-green{background:linear-gradient(135deg,#10b981,#059669);color:#fff}
+      .nb-btn-orange{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff}
+      .nb-btn-blue{background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff}
+      .nb-btn-gray{background:linear-gradient(to right,#e5e7eb,#d1d5db);color:#374151}
+      .nb-btn-red{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff}
+      @media(max-width:600px){.nb-tbl{font-size:.8rem}.nb-tbl th,.nb-tbl td{padding:.4rem .3rem}.nb-btn{width:100%;justify-content:center}}
+    </style>
     <div class="page-header"><h1>📋 แจ้งยอดชำระ</h1></div>
-    <div class="card">
-      <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
+    <div class="nb-info">ℹ️ ข้อมูลค่าน้ำ ค่าไฟ ค่าส่วนกลาง จะถูกดึงจากระบบโดยอัตโนมัติ ระบบจะคำนวณยอดรวมให้ กดปุ่มบันทึกภาพเพื่อส่งแจ้งยอด</div>
+    <div class="nb-section">
+      <div class="nb-section-title">📅 เลือกรอบบิล</div>
+      <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
         <div class="form-group" style="margin:0;flex:1;min-width:140px">
           <label class="form-label">เดือน</label>
-          <select class="form-select" id="nb-month" onchange="loadNotifyBills()">${monthOpts}</select>
+          <select class="form-select" id="nb-month">${monthOpts}</select>
         </div>
         <div class="form-group" style="margin:0;flex:1;min-width:100px">
           <label class="form-label">ปี (พ.ศ.)</label>
-          <input type="number" class="form-input" id="nb-year" value="${curYear}" style="max-width:120px" onchange="loadNotifyBills()">
+          <input type="number" class="form-input" id="nb-year" value="${curYear}" style="max-width:120px">
         </div>
-        <button class="btn btn-primary" onclick="loadNotifyBills()">📋 ดึงข้อมูล</button>
-        <button class="btn btn-secondary" onclick="generateBillsForPeriod()">⚙️ สร้างบิล</button>
+        <button class="nb-btn nb-btn-blue" onclick="loadNotifyBills()">📋 ดึงข้อมูล</button>
       </div>
-      <div id="nb-container"><div class="loading">กำลังโหลด...</div></div>
-    </div>`;
+    </div>
+    <div class="nb-section">
+      <div class="nb-section-title">📅 วันที่แจ้งยอด</div>
+      <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap">
+        <div class="form-group" style="margin:0;flex:1;min-width:160px">
+          <label class="form-label">วันที่แจ้งยอด</label>
+          <input type="date" class="form-input" id="nb-notify-date" value="${todayISO}" onchange="nbUpdateDueDate()">
+        </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:200px;display:flex;align-items:flex-end">
+          <div id="nb-due-display" style="padding:.7rem 1rem;background:#f0fdf4;border:1px solid #6ee7b7;border-radius:8px;font-size:1rem;color:#065f46;width:100%">กำหนดชำระ: กำลังคำนวณ...</div>
+        </div>
+      </div>
+    </div>
+    <div id="nb-container"><div class="loading">กำลังโหลด...</div></div>`;
+  nbUpdateDueDate();
   loadNotifyBills();
 }
+
+// Due date: 15 working days from notify date
+window.nbUpdateDueDate = function() {
+  const notifyVal = document.getElementById('nb-notify-date')?.value;
+  if (!notifyVal) return;
+  const d = new Date(notifyVal + 'T00:00:00');
+  if (isNaN(d.getTime())) return;
+  let count = 0;
+  while (count < 15) { d.setDate(d.getDate() + 1); const day = d.getDay(); if (day !== 0 && day !== 6) count++; }
+  const dd = d.getDate(), mm = THAI_MONTHS[d.getMonth()], yy = d.getFullYear() + 543;
+  window._nbDueDateISO = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
+  const el = document.getElementById('nb-due-display');
+  if (el) el.textContent = `กำหนดชำระภายในวันที่ ${dd} ${mm} ${yy}`;
+  // Update footer notes
+  document.querySelectorAll('.nb-footer-note').forEach(f => {
+    f.textContent = `งานโรงอาหาร โรงเรียนพะเยาพิทยาคม | กรุณาชำระภายในวันที่ ${dd} ${mm} ${yy}`;
+  });
+};
 
 window.loadNotifyBills = async function() {
   const month = parseInt(document.getElementById('nb-month').value);
@@ -1789,9 +1858,9 @@ window.loadNotifyBills = async function() {
   const period = ensureRes.data;
   window._nbPeriod = period.id;
 
+  // Fetch bills, readings, and stalls in parallel
   let billsRes = await callAPI('GET', '/billing/bills?period_id=' + period.id);
   let bills = billsRes.data || [];
-  const periodLabel = `${THAI_MONTHS[(period.month||1)-1]} ${period.year}`;
 
   // Auto-generate bills if readings exist but no bills yet
   if (!bills.length) {
@@ -1810,85 +1879,216 @@ window.loadNotifyBills = async function() {
     }
   }
 
+  const periodLabel = `${THAI_MONTHS[(period.month||1)-1]} พ.ศ. ${period.year}`;
+
   if (!bills.length) {
     container.innerHTML = `
       <div style="text-align:center;padding:2rem;color:var(--text-secondary)">
-        <p>ยังไม่มีบิลสำหรับรอบ ${periodLabel}</p>
-        <p style="font-size:.9rem">กรุณาบันทึกค่าน้ำ/ค่าไฟก่อน แล้วกดปุ่ม <strong>⚙️ สร้างบิล</strong></p>
+        <p>📭 ยังไม่มีข้อมูลค่าน้ำ/ค่าไฟ สำหรับรอบ ${periodLabel}</p>
+        <p style="font-size:.9rem;color:#94a3b8">กรุณาไปบันทึกค่าน้ำ/ค่าไฟ ที่หน้า "บันทึกค่าน้ำ" / "บันทึกค่าไฟ" ก่อน</p>
       </div>`;
     return;
   }
 
-  let totalRent=0, totalWater=0, totalElec=0, totalCommon=0, totalAll=0;
-  const rows = bills.map((b,i) => {
-    totalRent += b.rent_amount||0; totalWater += b.water_amount||0;
-    totalElec += b.electric_amount||0; totalCommon += b.common_fee||0;
-    totalAll += b.total_amount||0;
-    const statusBadge = b.status === 'issued' ? '<span class="badge badge-info">ออกแล้ว</span>'
-      : b.status === 'paid' ? '<span class="badge badge-success">ชำระแล้ว</span>'
-      : b.status === 'draft' ? '<span class="badge badge-secondary">ร่าง</span>'
-      : b.status === 'overdue' ? '<span class="badge badge-danger">ค้าง</span>'
-      : renderBadge(b.status, STATUS_BILL);
-    return `<tr>
-      <td style="text-align:center">${i+1}</td>
-      <td>${escapeHtml(b.stall_name||'')}</td>
-      <td class="right">${formatMoney(b.rent_amount)}</td>
-      <td class="right">${formatMoney(b.water_amount)}</td>
-      <td class="right">${formatMoney(b.electric_amount)}</td>
-      <td class="right">${formatMoney(b.common_fee)}</td>
-      <td class="right" style="font-weight:700">${formatMoney(b.total_amount)}</td>
-      <td>${statusBadge}</td>
-    </tr>`;
-  }).join('');
+  // Fetch readings for meter display
+  const [waterReadings, electricReadings] = await Promise.all([
+    callAPI('GET', '/billing/readings?period_id=' + period.id + '&type=water'),
+    callAPI('GET', '/billing/readings?period_id=' + period.id + '&type=electric')
+  ]);
+  const waterMap = {}; (waterReadings.data || []).forEach(r => { waterMap[r.stall_id] = r; });
+  const electricMap = {}; (electricReadings.data || []).forEach(r => { electricMap[r.stall_id] = r; });
 
+  // Summary stats
+  let totalRent=0, totalWater=0, totalElec=0, totalCommon=0, totalAll=0;
   const draftCount = bills.filter(b => b.status === 'draft').length;
   const issuedCount = bills.filter(b => b.status === 'issued' || b.status === 'overdue').length;
   const paidCount = bills.filter(b => b.status === 'paid').length;
 
+  const rows = bills.map((b,i) => {
+    totalRent += b.rent_amount||0; totalWater += b.water_amount||0;
+    totalElec += b.electric_amount||0; totalCommon += b.common_fee||0;
+    totalAll += b.total_amount||0;
+
+    const wr = waterMap[b.stall_id];
+    const er = electricMap[b.stall_id];
+    const wMeter = wr ? `${_last4(wr.prev_reading)} - ${_last4(wr.curr_reading)}` : '-';
+    const eMeter = er ? `${_last4(er.prev_reading)} - ${_last4(er.curr_reading)}` : '-';
+
+    const commonVal = b.common_fee || 0;
+    const isAdmin = getCurrentUser().role === 'admin';
+
+    return `<tr data-bill-id="${b.id}" data-stall-id="${b.stall_id}" data-idx="${i}">
+      <td>${i+1}</td>
+      <td class="col-name">${escapeHtml(b.stall_name||'')}</td>
+      <td style="font-size:.85rem">${wMeter}</td>
+      <td class="nb-money">${(b.water_amount||0) > 0 ? formatMoney(b.water_amount) : '-'}</td>
+      <td style="font-size:.85rem">${eMeter}</td>
+      <td class="nb-money">${(b.electric_amount||0) > 0 ? formatMoney(b.electric_amount) : '-'}</td>
+      <td><div class="nb-common-cell">
+        <span class="nb-common-val${isAdmin ? ' editable' : ''}" onclick="nbEditCommon(this)">${commonVal ? formatMoney(commonVal) : '-'}</span>
+        <input type="hidden" class="nb-common-input" value="${commonVal}" data-original="${commonVal}">
+        <button class="nb-exempt-btn" onclick="nbToggleExempt(this)" title="ยกเว้นค่าส่วนกลาง">ยกเว้น</button>
+      </div></td>
+      <td class="nb-total">${formatMoney(b.total_amount)}</td>
+    </tr>`;
+  }).join('');
+
+  const dueText = window._nbDueDateISO ? _formatThaiDate(window._nbDueDateISO) : '...';
+
   container.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1rem">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1rem;margin-bottom:1rem">
       <div class="stat-card" style="border-left:4px solid var(--primary)"><div class="stat-value">${bills.length}</div><div class="stat-label">ร้านทั้งหมด</div></div>
       <div class="stat-card" style="border-left:4px solid var(--info)"><div class="stat-value">${formatMoney(totalAll)}</div><div class="stat-label">ยอดรวม (บาท)</div></div>
       <div class="stat-card" style="border-left:4px solid #9CA3AF"><div class="stat-value">${draftCount}</div><div class="stat-label">ร่าง</div></div>
       <div class="stat-card" style="border-left:4px solid var(--warning)"><div class="stat-value">${issuedCount}</div><div class="stat-label">ออกบิลแล้ว</div></div>
       <div class="stat-card" style="border-left:4px solid var(--success)"><div class="stat-value">${paidCount}</div><div class="stat-label">ชำระแล้ว</div></div>
     </div>
-    <h3>📋 สรุปยอด — ${periodLabel}</h3>
-    <div class="table-wrap"><table>
-      <thead><tr><th>#</th><th>ร้านค้า</th><th>ค่าเช่า</th><th>ค่าน้ำ</th><th>ค่าไฟ</th><th>ส่วนกลาง</th><th>รวม</th><th>สถานะ</th></tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr style="font-weight:700;background:#F8FAFC">
-        <td colspan="2">รวมทั้งสิ้น</td>
-        <td class="right">${formatMoney(totalRent)}</td>
-        <td class="right">${formatMoney(totalWater)}</td>
-        <td class="right">${formatMoney(totalElec)}</td>
-        <td class="right">${formatMoney(totalCommon)}</td>
-        <td class="right" style="font-size:1.1em">${formatMoney(totalAll)}</td>
-        <td></td>
-      </tr></tfoot>
-    </table></div>
-    ${draftCount ? `<div style="margin-top:1rem;display:flex;gap:1rem;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="batchIssueBills('${period.id}')">📤 ออกบิลทั้งหมด (${draftCount} ร้าน)</button>
-    </div>` : '<div style="margin-top:1rem;padding:1rem;background:#D1FAE5;border-radius:8px;color:#065F46">✅ ออกบิลครบทุกร้านแล้ว</div>'}`;
+
+    <div class="nb-capture" id="nb-capture-table">
+      <div class="nb-capture-header">📋 แจ้งยอดชำระค่าเช่าร้านค้า ประจำเดือน${periodLabel}</div>
+      <div style="overflow-x:auto">
+      <table class="nb-tbl">
+        <thead><tr>
+          <th style="width:40px">#</th><th class="col-name">ร้านค้า</th>
+          <th>มิเตอร์น้ำ<br><span style="font-weight:400;font-size:.8rem">(ก่อน - ล่าสุด)</span></th>
+          <th>ค่าน้ำ</th>
+          <th>มิเตอร์ไฟ<br><span style="font-weight:400;font-size:.8rem">(ก่อน - ล่าสุด)</span></th>
+          <th>ค่าไฟ</th>
+          <th>ค่าส่วนกลาง</th>
+          <th>รวม</th>
+        </tr></thead>
+        <tbody id="nb-tbody">${rows}</tbody>
+        <tfoot><tr style="font-weight:700;background:#f0fdf4">
+          <td colspan="3" style="text-align:right;color:#065f46">รวมทั้งสิ้น</td>
+          <td class="nb-money">${formatMoney(totalWater)}</td>
+          <td></td>
+          <td class="nb-money">${formatMoney(totalElec)}</td>
+          <td class="nb-money">${formatMoney(totalCommon)}</td>
+          <td class="nb-total" style="font-size:1.1em">${formatMoney(totalAll)}</td>
+        </tr></tfoot>
+      </table>
+      </div>
+      <div class="nb-footer nb-footer-note">งานโรงอาหาร โรงเรียนพะเยาพิทยาคม | กรุณาชำระภายในวันที่ ${dueText}</div>
+    </div>
+
+    <div style="display:flex;gap:1rem;justify-content:center;margin-top:1.5rem;flex-wrap:wrap">
+      <button class="nb-btn nb-btn-green" onclick="nbSaveAsImage()">💾 บันทึกรูปภาพ</button>
+      ${draftCount ? `<button class="nb-btn nb-btn-orange" onclick="nbBatchIssue()">📤 ออกบิลทั้งหมด (${draftCount} ร้าน)</button>` : ''}
+      <button class="nb-btn nb-btn-gray" onclick="nbRegenerateBills()">⚙️ สร้างบิลใหม่</button>
+    </div>
+    ${!draftCount && bills.length ? '<div style="margin-top:1rem;padding:1rem;background:#D1FAE5;border-radius:8px;color:#065F46;text-align:center">✅ ออกบิลครบทุกร้านแล้ว</div>' : ''}`;
+
+  nbUpdateDueDate();
 };
 
-window.generateBillsForPeriod = async function() {
+function _last4(num) {
+  if (num == null) return '-';
+  const s = String(num);
+  return s.length > 4 ? s.slice(-4) : s;
+}
+function _formatThaiDate(iso) {
+  if (!iso) return '...';
+  try {
+    const [y,m,d] = iso.split('-');
+    return `${parseInt(d)} ${THAI_MONTHS[parseInt(m)-1]} ${parseInt(y)+543}`;
+  } catch { return '...'; }
+}
+
+// Inline edit common fee
+window.nbEditCommon = function(span) {
+  if (!span.classList.contains('editable')) return;
+  const cell = span.closest('.nb-common-cell');
+  const input = cell.querySelector('.nb-common-input');
+  const curVal = parseFloat(input.value) || 0;
+  const ed = document.createElement('input');
+  ed.type = 'number'; ed.className = 'nb-edit-input';
+  ed.value = curVal; ed.min = '0'; ed.step = '10';
+  span.style.display = 'none';
+  cell.insertBefore(ed, span);
+  ed.focus(); ed.select();
+  function finish() {
+    let nv = parseFloat(ed.value) || 0;
+    if (nv < 0) nv = 0;
+    input.value = nv;
+    span.textContent = nv ? formatMoney(nv) : '-';
+    span.style.display = '';
+    if (ed.parentNode) ed.parentNode.removeChild(ed);
+    nbRecalcRow(span.closest('tr'));
+  }
+  ed.addEventListener('blur', finish);
+  ed.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); ed.blur(); }
+    if (e.key === 'Escape') { ed.value = curVal; ed.blur(); }
+  });
+};
+
+window.nbToggleExempt = function(btn) {
+  const tr = btn.closest('tr');
+  const input = tr.querySelector('.nb-common-input');
+  const display = tr.querySelector('.nb-common-val');
+  if (btn.classList.contains('exempted')) {
+    btn.classList.remove('exempted');
+    btn.textContent = 'ยกเว้น';
+    tr.classList.remove('nb-exempted-row');
+    input.value = input.getAttribute('data-original');
+    display.textContent = parseFloat(input.value) ? formatMoney(parseFloat(input.value)) : '-';
+  } else {
+    btn.classList.add('exempted');
+    btn.textContent = '✓ ยกเว้นอยู่';
+    tr.classList.add('nb-exempted-row');
+    input.value = 0;
+    display.textContent = '-';
+  }
+  nbRecalcRow(tr);
+};
+
+function nbRecalcRow(tr) {
+  const cells = tr.querySelectorAll('td');
+  const water = parseFloat((cells[3].textContent || '0').replace(/[^0-9.-]/g, '')) || 0;
+  const elec = parseFloat((cells[5].textContent || '0').replace(/[^0-9.-]/g, '')) || 0;
+  const common = parseFloat(tr.querySelector('.nb-common-input').value) || 0;
+  // rent is not shown separately here, pull from original bill
+  const totalCell = cells[cells.length - 1];
+  // We need rent — get it from the bill data
+  // Since we don't have rent column displayed, recalculate from water+elec+common + rent
+  // For simplicity, just update the common portion delta
+  const origCommon = parseFloat(tr.querySelector('.nb-common-input').getAttribute('data-original')) || 0;
+  const origTotal = parseFloat(totalCell.textContent.replace(/[^0-9.-]/g, '')) || 0;
+  const newTotal = origTotal - origCommon + common;
+  totalCell.textContent = formatMoney(newTotal);
+}
+
+// Save table as image
+window.nbSaveAsImage = async function() {
+  if (typeof html2canvas === 'undefined') return toast('ไม่พบ html2canvas library', 'error');
+  const el = document.getElementById('nb-capture-table');
+  if (!el) return;
+
+  // Hide exempt buttons before capture
+  const exemptBtns = el.querySelectorAll('.nb-exempt-btn');
+  exemptBtns.forEach(b => b.style.visibility = 'hidden');
+
   const month = parseInt(document.getElementById('nb-month').value);
-  const year = parseInt(document.getElementById('nb-year').value);
-  if (!month || !year) return toast('กรุณาเลือกเดือนและปี', 'error');
+  const year = document.getElementById('nb-year').value;
+  const fileName = `แจ้งยอดชำระ_โรงอาหาร_${THAI_MONTHS[month-1]}_${year}.png`;
 
-  if (!await confirmDialog('สร้างบิลอัตโนมัติจากข้อมูลสัญญาและมิเตอร์?')) return;
-
-  const ensureRes = await callAPI('POST', '/billing/periods/ensure', { year, month });
-  if (ensureRes.error) return toast(ensureRes.error, 'error');
-
-  const res = await callAPI('POST', '/billing/generate', { period_id: ensureRes.data.id });
-  if (res.error) return toast(res.error, 'error');
-  toast(`สร้างบิลสำเร็จ ${res.data?.count || 0} ร้าน`, 'success');
-  loadNotifyBills();
+  try {
+    const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false, windowWidth: 1200 });
+    exemptBtns.forEach(b => b.style.visibility = '');
+    const link = document.createElement('a');
+    link.download = fileName;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    toast('บันทึกรูปภาพสำเร็จ!', 'success');
+  } catch (err) {
+    exemptBtns.forEach(b => b.style.visibility = '');
+    toast('เกิดข้อผิดพลาด: ' + err.message, 'error');
+  }
 };
 
-window.batchIssueBills = async function(periodId) {
+window.nbBatchIssue = async function() {
+  const periodId = window._nbPeriod;
+  if (!periodId) return;
   if (!await confirmDialog('ออกบิลทุกร้านที่ยังเป็นร่าง? ผู้เช่าจะได้รับแจ้งยอด')) return;
   const bills = (await callAPI('GET', '/billing/bills?period_id=' + periodId + '&status=draft')).data || [];
   let ok = 0, fail = 0;
@@ -1897,6 +2097,21 @@ window.batchIssueBills = async function(periodId) {
     if (res.error) fail++; else ok++;
   }
   toast(`ออกบิลสำเร็จ ${ok} ร้าน${fail ? ' (ผิดพลาด ' + fail + ')' : ''}`, fail ? 'warning' : 'success');
+  loadNotifyBills();
+};
+
+window.nbRegenerateBills = async function() {
+  const month = parseInt(document.getElementById('nb-month').value);
+  const year = parseInt(document.getElementById('nb-year').value);
+  if (!month || !year) return toast('กรุณาเลือกเดือนและปี', 'error');
+  if (!await confirmDialog('สร้างบิลใหม่จากข้อมูลสัญญาและมิเตอร์?')) return;
+
+  const ensureRes = await callAPI('POST', '/billing/periods/ensure', { year, month });
+  if (ensureRes.error) return toast(ensureRes.error, 'error');
+
+  const res = await callAPI('POST', '/billing/generate', { period_id: ensureRes.data.id });
+  if (res.error) return toast(res.error, 'error');
+  toast(`สร้างบิลสำเร็จ ${res.data?.count || 0} ร้าน`, 'success');
   loadNotifyBills();
 };
 
