@@ -273,30 +273,32 @@ async function generateBills(DB, request, user) {
   const period = await DB.prepare('SELECT * FROM billing_periods WHERE id = ?').bind(periodId).first();
   if (!period) return Response.json({ error: 'ไม่พบรอบบิล' }, { status: 404 });
 
-  // Get active contracts
+  // Due date: 15th of next month
+  const dueMonth = period.month === 12 ? 1 : period.month + 1;
+  const dueYear = period.month === 12 ? (period.year - 543 + 1) : (period.year - 543);
+  const dueDate = `${dueYear}-${String(dueMonth).padStart(2, '0')}-15`;
+
+  let count = 0;
+
+  // 1) Generate bills for stalls with active contracts
   const { results: contracts } = await DB.prepare(
     "SELECT c.*, s.name as stall_name FROM contracts c JOIN stalls s ON c.stall_id = s.id WHERE c.status = 'active'"
   ).all();
 
-  let count = 0;
   for (const contract of contracts) {
-    // Check if bill already exists
     const existing = await DB.prepare('SELECT id FROM bills WHERE stall_id = ? AND billing_period_id = ?')
       .bind(contract.stall_id, periodId).first();
     if (existing) continue;
 
-    // Get meter readings
     const waterReading = await DB.prepare(
       "SELECT * FROM meter_readings WHERE stall_id = ? AND billing_period_id = ? AND type = 'water'"
     ).bind(contract.stall_id, periodId).first();
-
     const electricReading = await DB.prepare(
       "SELECT * FROM meter_readings WHERE stall_id = ? AND billing_period_id = ? AND type = 'electric'"
     ).bind(contract.stall_id, periodId).first();
 
     const waterUnits = waterReading ? Math.max(0, waterReading.curr_reading - waterReading.prev_reading) : 0;
     const electricUnits = electricReading ? Math.max(0, electricReading.curr_reading - electricReading.prev_reading) : 0;
-
     const waterAmount = waterUnits * period.water_rate;
     const electricAmount = electricUnits * period.electric_rate;
     const rentAmount = contract.monthly_rent || 0;
@@ -305,16 +307,44 @@ async function generateBills(DB, request, user) {
 
     const billId = `BILL-${period.year}-${String(period.month).padStart(2, '0')}-${String(count + 1).padStart(3, '0')}`;
 
-    // Due date: 15th of next month
-    const dueMonth = period.month === 12 ? 1 : period.month + 1;
-    const dueYear = period.month === 12 ? (period.year - 543 + 1) : (period.year - 543);
-    const dueDate = `${dueYear}-${String(dueMonth).padStart(2, '0')}-15`;
-
     await DB.prepare(
       `INSERT INTO bills (id, stall_id, contract_id, billing_period_id, rent_amount, water_units, water_amount, electric_units, electric_amount, common_fee, total_amount, status, due_date)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(billId, contract.stall_id, contract.id, periodId, rentAmount, waterUnits, waterAmount, electricUnits, electricAmount, commonFee, totalAmount, 'draft', dueDate).run();
+    count++;
+  }
 
+  // 2) Generate bills for stalls with readings but NO active contract
+  const { results: readingStalls } = await DB.prepare(
+    `SELECT DISTINCT mr.stall_id, s.name as stall_name
+     FROM meter_readings mr
+     JOIN stalls s ON mr.stall_id = s.id
+     WHERE mr.billing_period_id = ?
+     AND mr.stall_id NOT IN (SELECT stall_id FROM bills WHERE billing_period_id = ?)`
+  ).bind(periodId, periodId).all();
+
+  for (const rs of readingStalls) {
+    const waterReading = await DB.prepare(
+      "SELECT * FROM meter_readings WHERE stall_id = ? AND billing_period_id = ? AND type = 'water'"
+    ).bind(rs.stall_id, periodId).first();
+    const electricReading = await DB.prepare(
+      "SELECT * FROM meter_readings WHERE stall_id = ? AND billing_period_id = ? AND type = 'electric'"
+    ).bind(rs.stall_id, periodId).first();
+
+    const waterUnits = waterReading ? Math.max(0, waterReading.curr_reading - waterReading.prev_reading) : 0;
+    const electricUnits = electricReading ? Math.max(0, electricReading.curr_reading - electricReading.prev_reading) : 0;
+    const waterAmount = waterUnits * period.water_rate;
+    const electricAmount = electricUnits * period.electric_rate;
+    const totalAmount = waterAmount + electricAmount;
+
+    if (totalAmount <= 0 && !waterReading && !electricReading) continue;
+
+    const billId = `BILL-${period.year}-${String(period.month).padStart(2, '0')}-${String(count + 1).padStart(3, '0')}`;
+
+    await DB.prepare(
+      `INSERT INTO bills (id, stall_id, contract_id, billing_period_id, rent_amount, water_units, water_amount, electric_units, electric_amount, common_fee, total_amount, status, due_date)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).bind(billId, rs.stall_id, null, periodId, 0, waterUnits, waterAmount, electricUnits, electricAmount, 0, totalAmount, 'draft', dueDate).run();
     count++;
   }
 
