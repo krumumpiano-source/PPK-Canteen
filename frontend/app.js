@@ -172,17 +172,23 @@ async function pgDashboardStallOwner(el, user) {
   }
 
   const stallId = user.stall_id;
-  const [billsRes, contractRes, paymentsRes, stallsRes, ppRes] = await Promise.all([
+  const [billsRes, contractRes, paymentsRes, stallsRes, bankRes, bankNoRes, bankNameRes, ppRes] = await Promise.all([
     callAPI('GET', '/billing/bills?stall_id=' + stallId + '&limit=20'),
     callAPI('GET', '/contracts?stall_id=' + stallId + '&status=active'),
     callAPI('GET', '/payments?stall_id=' + stallId + '&limit=10'),
     isSimulating ? callAPI('GET', '/stalls') : Promise.resolve(null),
+    callAPI('GET', '/settings/bank_name'),
+    callAPI('GET', '/settings/bank_account_no'),
+    callAPI('GET', '/settings/bank_account_name'),
     callAPI('GET', '/settings/promptpay_id')
   ]);
   const bills = billsRes.data || [];
   const contract = (contractRes.data || [])[0] || {};
   const payments = paymentsRes.data || [];
   const allStalls = isSimulating ? (stallsRes?.data || []).filter(s => s.status === 'occupied') : [];
+  const bankName = bankRes.data?.value || '';
+  const bankAccountNo = bankNoRes.data?.value || '';
+  const bankAccountName = bankNameRes.data?.value || '';
   const promptPayId = ppRes.data?.value || '';
 
   // Find latest active bill
@@ -302,23 +308,37 @@ async function pgDashboardStallOwner(el, user) {
   }
   if (c > 0) invoiceRows += `<tr><td>🧹 ค่าส่วนกลาง</td><td class="r">-</td><td class="r">-</td><td class="r">-</td><td class="r">-</td><td class="r"><strong>${formatMoney(c)}</strong></td></tr>`;
 
-  // -- QR Code section --
+  // -- QR Code + Bank Account section --
   let qrSectionHTML = '';
   if (amount > 0 && slipStatus !== 'success' && slipStatus !== 'reviewing') {
+    const hasBankInfo = bankName && bankAccountNo;
+    const bankInfoHTML = hasBankInfo ? `
+      <div class="so-bank-info">
+        <div class="so-bank-row"><span class="so-bank-label">🏦 ธนาคาร</span><strong>${escapeHtml(bankName)}</strong></div>
+        <div class="so-bank-row"><span class="so-bank-label">📋 เลขบัญชี</span><strong>${escapeHtml(bankAccountNo)}</strong></div>
+        ${bankAccountName ? `<div class="so-bank-row"><span class="so-bank-label">👤 ชื่อบัญชี</span><strong>${escapeHtml(bankAccountName)}</strong></div>` : ''}
+        <div class="so-bank-row"><span class="so-bank-label">💰 ยอดชำระ</span><strong style="color:#e11d48">${formatMoney(amount)} บาท</strong></div>
+      </div>` : '';
+
     if (promptPayId) {
       qrSectionHTML = `
         <div class="so-qr-section">
           <div class="so-qr-title">📱 สแกน QR Code เพื่อชำระเงิน</div>
           <div id="so-qr-container" style="display:flex;justify-content:center;padding:1rem"></div>
-          <div class="so-qr-info">PromptPay: <strong>${escapeHtml(promptPayId.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3'))}</strong></div>
-          <div class="so-qr-info">จำนวน: <strong>${formatMoney(amount)} บาท</strong></div>
+          ${bankInfoHTML}
           <div class="so-qr-note">💡 หลังชำระแล้ว กรุณากด "ส่งสลิปชำระเงิน" พร้อมแนบสลิป</div>
+        </div>`;
+    } else if (hasBankInfo) {
+      qrSectionHTML = `
+        <div class="so-qr-section">
+          <div class="so-qr-title">🏦 ข้อมูลสำหรับชำระเงิน</div>
+          ${bankInfoHTML}
+          <div class="so-qr-note">💡 หลังโอนเงินแล้ว กรุณากด "ส่งสลิปชำระเงิน" พร้อมแนบสลิป</div>
         </div>`;
     } else {
       qrSectionHTML = `
         <div class="so-qr-section">
-          <div class="so-qr-title" style="color:#94a3b8">📱 QR Code PromptPay</div>
-          <div style="padding:1rem;color:#94a3b8;font-size:.9rem">⚠️ ยังไม่ได้ตั้งค่า PromptPay ID — กรุณาแจ้งผู้ดูแลระบบ</div>
+          <div style="padding:1rem;color:#94a3b8;font-size:.9rem">⚠️ ยังไม่ได้ตั้งค่าข้อมูลบัญชีธนาคาร — กรุณาแจ้งผู้ดูแลระบบ</div>
         </div>`;
     }
   }
@@ -1389,7 +1409,14 @@ async function pgSettings() {
       <div class="card-header"><h3 class="card-title">⚙️ ข้อมูลทั่วไป</h3></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">ชื่อโรงเรียน</label><input class="form-input" name="school_name" value="${escapeHtml(s.school_name||'')}"></div>
-        <div class="form-group"><label class="form-label">PromptPay ID</label><input class="form-input" name="promptpay_id" value="${escapeHtml(s.promptpay_id||'')}" placeholder="เช่น 0-1234-56789-01-2"></div>
+        <div class="form-group"><label class="form-label">ชื่อธนาคาร</label><input class="form-input" name="bank_name" value="${escapeHtml(s.bank_name||'')}" placeholder="เช่น ธนาคารกรุงไทย"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">เลขที่บัญชี</label><input class="form-input" name="bank_account_no" value="${escapeHtml(s.bank_account_no||'')}" placeholder="เช่น 123-4-56789-0"></div>
+        <div class="form-group"><label class="form-label">ชื่อบัญชี</label><input class="form-input" name="bank_account_name" value="${escapeHtml(s.bank_account_name||'')}" placeholder="เช่น โรงเรียนพะเยาพิทยาคม"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">PromptPay ID (สำหรับ QR Code)</label><input class="form-input" name="promptpay_id" value="${escapeHtml(s.promptpay_id||'')}" placeholder="เบอร์โทร 10 หลัก หรือ เลขบัตร ปชช. 13 หลัก"></div>
       </div>
       <h3 style="margin-top:1.5rem;margin-bottom:1rem;font-size:1rem;color:var(--gray-700)">💧⚡ อัตราค่าบริการ</h3>
       <div class="form-row" style="grid-template-columns:repeat(3,1fr)">
@@ -2403,16 +2430,22 @@ async function pgUploadSlip() {
   el.innerHTML = `<div class="loading">กำลังโหลด...</div>`;
 
   const stallId = user.stall_id;
-  const [billsRes, paymentsRes, contractRes, ppRes] = await Promise.all([
+  const [billsRes, paymentsRes, contractRes, bankRes, bankNoRes, bankNameRes, ppRes] = await Promise.all([
     callAPI('GET', '/billing/bills?stall_id=' + stallId + '&limit=20'),
     callAPI('GET', '/payments?stall_id=' + stallId + '&limit=20'),
     callAPI('GET', '/contracts?stall_id=' + stallId + '&status=active'),
+    callAPI('GET', '/settings/bank_name'),
+    callAPI('GET', '/settings/bank_account_no'),
+    callAPI('GET', '/settings/bank_account_name'),
     callAPI('GET', '/settings/promptpay_id')
   ]);
   const allBills = billsRes.data || [];
   const allPayments = paymentsRes.data || [];
   const contract = (contractRes.data || [])[0] || {};
   const stallName = user.stall_name || contract.stall_name || 'ร้านของฉัน';
+  const bankName = bankRes.data?.value || '';
+  const bankAccountNo = bankNoRes.data?.value || '';
+  const bankAccountName = bankNameRes.data?.value || '';
   const promptPayId = ppRes.data?.value || '';
 
   // Find unpaid bills (issued/overdue, no pending/verified payment)
@@ -2495,12 +2528,19 @@ async function pgUploadSlip() {
 
     <div class="form-section">
       <div class="form-section-title">💳 ข้อมูลสลิป</div>
-      ${promptPayId && defaultBill.total_amount > 0 ? `
+      ${defaultBill.total_amount > 0 && (promptPayId || bankAccountNo) ? `
       <div class="so-qr-section" style="margin-bottom:1rem;border-radius:12px;border:1px solid #e2e8f0">
-        <div class="so-qr-title">📱 สแกน QR Code เพื่อชำระเงิน</div>
-        <div id="slip-qr-container" style="display:flex;justify-content:center;padding:1rem"></div>
-        <div class="so-qr-info">PromptPay: <strong>${escapeHtml(promptPayId.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3'))}</strong></div>
-        <div class="so-qr-info">จำนวน: <strong>${formatMoney(defaultBill.total_amount)} บาท</strong></div>
+        ${promptPayId ? `
+          <div class="so-qr-title">📱 สแกน QR Code เพื่อชำระเงิน</div>
+          <div id="slip-qr-container" style="display:flex;justify-content:center;padding:1rem"></div>` : `
+          <div class="so-qr-title">🏦 ข้อมูลสำหรับชำระเงิน</div>`}
+        ${bankName ? `<div class="so-bank-info">
+          <div class="so-bank-row"><span class="so-bank-label">🏦 ธนาคาร</span><strong>${escapeHtml(bankName)}</strong></div>
+          <div class="so-bank-row"><span class="so-bank-label">📋 เลขบัญชี</span><strong>${escapeHtml(bankAccountNo)}</strong></div>
+          ${bankAccountName ? `<div class="so-bank-row"><span class="so-bank-label">👤 ชื่อบัญชี</span><strong>${escapeHtml(bankAccountName)}</strong></div>` : ''}
+          <div class="so-bank-row"><span class="so-bank-label">💰 ยอดชำระ</span><strong style="color:#e11d48">${formatMoney(defaultBill.total_amount)} บาท</strong></div>
+        </div>` : `
+          <div class="so-qr-info">จำนวน: <strong>${formatMoney(defaultBill.total_amount)} บาท</strong></div>`}
       </div>` : ''}
       <input type="hidden" id="slip-bill-id" value="${defaultBill.id}">
       <div class="form-group">
