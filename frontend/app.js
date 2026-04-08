@@ -172,20 +172,31 @@ async function pgDashboardStallOwner(el, user) {
   }
 
   const stallId = user.stall_id;
-  const [billsRes, contractRes, paymentsRes, stallsRes] = await Promise.all([
+  const [billsRes, contractRes, paymentsRes, stallsRes, ppRes] = await Promise.all([
     callAPI('GET', '/billing/bills?stall_id=' + stallId + '&limit=20'),
     callAPI('GET', '/contracts?stall_id=' + stallId + '&status=active'),
-    callAPI('GET', '/payments?stall_id=' + stallId + '&limit=5'),
-    isSimulating ? callAPI('GET', '/stalls') : Promise.resolve(null)
+    callAPI('GET', '/payments?stall_id=' + stallId + '&limit=10'),
+    isSimulating ? callAPI('GET', '/stalls') : Promise.resolve(null),
+    callAPI('GET', '/settings/promptpay_id')
   ]);
   const bills = billsRes.data || [];
   const contract = (contractRes.data || [])[0] || {};
   const payments = paymentsRes.data || [];
   const allStalls = isSimulating ? (stallsRes?.data || []).filter(s => s.status === 'occupied') : [];
+  const promptPayId = ppRes.data?.value || '';
 
   // Find latest active bill
   const activeBill = bills.find(b => b.status === 'issued' || b.status === 'overdue') || null;
   const amount = activeBill ? (activeBill.total_amount || 0) : 0;
+
+  // Fetch meter readings for this bill's period
+  let waterReading = null, electricReading = null;
+  if (activeBill && activeBill.billing_period_id) {
+    const readRes = await callAPI('GET', '/billing/readings?stall_id=' + stallId + '&period_id=' + activeBill.billing_period_id);
+    const readings = readRes.data || [];
+    waterReading = readings.find(r => r.type === 'water') || null;
+    electricReading = readings.find(r => r.type === 'electric') || null;
+  }
 
   // Check if there's a pending/reviewing payment for this bill
   let slipStatus = 'none';
@@ -205,7 +216,6 @@ async function pgDashboardStallOwner(el, user) {
   const overdueBills = bills.filter(b => b.status === 'overdue');
   const outstanding = overdueBills.reduce((sum, b) => sum + (b.total_amount || 0), 0);
 
-  // Period display
   const periodLabel = activeBill ? (activeBill.period_label || '') : '';
   const stallName = user.stall_name || contract.stall_name || 'ร้านของฉัน';
   const firstName = user.name || '';
@@ -217,97 +227,156 @@ async function pgDashboardStallOwner(el, user) {
     stallSwitcherHTML = `<select class="stall-switcher" onchange="switchSimStall(this.value)">${opts}</select>`;
   }
 
-  // Due date info
+  // -- Format date helper --
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('th-TH', { year:'numeric', month:'short', day:'numeric' }) : '-';
+
+  // -- Due date --
   let dueDateHTML = '';
+  let dueDateStr = '';
   if (activeBill && activeBill.due_date && amount > 0 && slipStatus !== 'success') {
     const dd = new Date(activeBill.due_date);
-    const ddStr = dd.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
-    const daysLeft = Math.ceil((dd - new Date()) / (1000 * 60 * 60 * 24));
+    dueDateStr = dd.toLocaleDateString('th-TH', { year:'numeric', month:'long', day:'numeric' });
+    const daysLeft = Math.ceil((dd - new Date()) / 86400000);
     let cls = '';
     let daysText = '';
-    if (daysLeft < 0) { cls = 'urgent'; daysText = ` (เลยกำหนดแล้ว ${Math.abs(daysLeft)} วัน)`; }
+    if (daysLeft < 0) { cls = 'urgent'; daysText = ` (เลยกำหนด ${Math.abs(daysLeft)} วัน)`; }
     else if (daysLeft === 0) { cls = 'urgent'; daysText = ' (ครบกำหนดวันนี้!)'; }
-    else if (daysLeft <= 3) { cls = 'soon'; daysText = ` (เหลืออีก ${daysLeft} วัน)`; }
-    else if (daysLeft <= 7) { daysText = ` (เหลืออีก ${daysLeft} วัน)`; }
-    dueDateHTML = `<div class="hero-due-warning ${cls}">⏰ กรุณาชำระภายในวันที่ ${escapeHtml(ddStr)}${daysText}</div>`;
+    else if (daysLeft <= 3) { cls = 'soon'; daysText = ` (เหลือ ${daysLeft} วัน)`; }
+    else if (daysLeft <= 7) { daysText = ` (เหลือ ${daysLeft} วัน)`; }
+    dueDateHTML = `<div class="so-due ${cls}">⏰ ชำระภายใน ${escapeHtml(dueDateStr)}${daysText}</div>`;
   }
 
-  // Status badge
+  // -- Status badge --
   let badgeHTML = '';
-  if (slipStatus === 'success') badgeHTML = '<div class="hero-status paid">✅ ชำระแล้ว</div>';
-  else if (slipStatus === 'reviewing') badgeHTML = '<div class="hero-status pending">🔍 รอตรวจสอบ</div>';
-  else if (slipStatus === 'rejected') badgeHTML = '<div class="hero-status rejected">❌ สลิปไม่ผ่าน</div>';
-  else if (amount > 0) badgeHTML = '<div class="hero-status overdue">⏳ รอชำระ</div>';
+  if (slipStatus === 'success') badgeHTML = '<span class="so-badge paid">✅ ชำระแล้ว</span>';
+  else if (slipStatus === 'reviewing') badgeHTML = '<span class="so-badge pending">🔍 รอตรวจสอบ</span>';
+  else if (slipStatus === 'rejected') badgeHTML = '<span class="so-badge rejected">❌ สลิปไม่ผ่าน</span>';
+  else if (amount > 0) badgeHTML = '<span class="so-badge waiting">⏳ รอชำระ</span>';
 
-  // CTA button
-  let ctaHTML = '';
-  if (slipStatus === 'success') {
-    ctaHTML = '<button class="hero-cta success">✅ ชำระสำเร็จแล้ว</button>';
-  } else if (slipStatus === 'reviewing') {
-    ctaHTML = '<button class="hero-cta reviewing">🔍 อยู่ระหว่างตรวจสอบ</button>';
-  } else if (slipStatus === 'rejected') {
-    ctaHTML = `<button class="hero-cta rejected-cta" onclick="location.hash='#/upload-slip'">⚠️ สลิปไม่ผ่าน — กดส่งใหม่</button>`;
-  } else if (amount > 0) {
-    ctaHTML = `<button class="hero-cta" onclick="location.hash='#/upload-slip'">📤 ส่งสลิปชำระเงิน</button>`;
-  } else {
-    ctaHTML = '<button class="hero-cta success">🎉 ไม่มียอดค้างชำระ</button>';
-  }
-
-  // Bill breakdown
-  let breakdownHTML = '';
-  if (activeBill && amount > 0) {
-    const w = activeBill.water_amount || 0;
-    const e = activeBill.electric_amount || 0;
-    const r = activeBill.rent_amount || 0;
-    const c = activeBill.common_fee || 0;
-    if (w > 0 || e > 0 || r > 0 || c > 0) {
-      breakdownHTML = `<div class="hero-breakdown">
-        ${r > 0 ? `<div class="hb-item"><span class="hb-dot rent"></span><span class="hb-label">ค่าเช่า</span><span class="hb-val">${formatMoney(r)} บาท</span></div>` : ''}
-        ${w > 0 ? `<div class="hb-item"><span class="hb-dot water"></span><span class="hb-label">ค่าน้ำ</span><span class="hb-val">${formatMoney(w)} บาท</span></div>` : ''}
-        ${e > 0 ? `<div class="hb-item"><span class="hb-dot electric"></span><span class="hb-label">ค่าไฟ</span><span class="hb-val">${formatMoney(e)} บาท</span></div>` : ''}
-        ${c > 0 ? `<div class="hb-item"><span class="hb-dot common"></span><span class="hb-label">ค่าส่วนกลาง</span><span class="hb-val">${formatMoney(c)} บาท</span></div>` : ''}
-      </div>`;
-    }
-  }
-
-  // Rejection banner
+  // -- Rejection banner --
   let rejectHTML = '';
   if (slipStatus === 'rejected') {
-    rejectHTML = `<div class="hero-reject-banner">⚠️ <strong>สลิปถูกปฏิเสธ</strong>${reviewNote ? '<br>เหตุผล: <strong>' + escapeHtml(reviewNote) + '</strong>' : ''}<br>กรุณากด <strong>"⚠️ สลิปไม่ผ่าน — กดส่งใหม่"</strong> เพื่ออัพโหลดสลิปใหม่</div>`;
+    rejectHTML = `<div class="so-reject">⚠️ <strong>สลิปถูกปฏิเสธ</strong>${reviewNote ? ' — ' + escapeHtml(reviewNote) : ''}</div>`;
   }
 
-  // Cancel button
+  // -- CTA --
+  let ctaHTML = '';
+  if (slipStatus === 'success') {
+    ctaHTML = '<button class="so-cta paid" disabled>✅ ชำระสำเร็จแล้ว</button>';
+  } else if (slipStatus === 'reviewing') {
+    ctaHTML = '<button class="so-cta reviewing" disabled>🔍 อยู่ระหว่างตรวจสอบ</button>';
+  } else if (slipStatus === 'rejected') {
+    ctaHTML = `<button class="so-cta rejected" onclick="location.hash='#/upload-slip'">⚠️ สลิปไม่ผ่าน — กดส่งใหม่</button>`;
+  } else if (amount > 0) {
+    ctaHTML = `<button class="so-cta pay" onclick="location.hash='#/upload-slip'">📤 ส่งสลิปชำระเงิน</button>`;
+  }
+
+  // -- Cancel slip --
   let cancelHTML = '';
   if (slipStatus === 'reviewing' || slipStatus === 'rejected') {
-    cancelHTML = `<button class="hero-cancel-btn" onclick="cancelSlipFromDashboard(${paymentId})">🗑️ ยกเลิกสลิปที่ส่งไว้</button>`;
+    cancelHTML = `<button class="so-cancel-btn" onclick="cancelSlipFromDashboard(${paymentId})">🗑️ ยกเลิกสลิปที่ส่งไว้</button>`;
   }
 
-  // Payment stats
+  // -- Meter readings rows --
+  const w = activeBill ? (activeBill.water_amount || 0) : 0;
+  const e = activeBill ? (activeBill.electric_amount || 0) : 0;
+  const r = activeBill ? (activeBill.rent_amount || 0) : 0;
+  const c = activeBill ? (activeBill.common_fee || 0) : 0;
+  const wUnits = activeBill ? (activeBill.water_units || 0) : 0;
+  const eUnits = activeBill ? (activeBill.electric_units || 0) : 0;
+
+  // Build invoice table rows
+  let invoiceRows = '';
+  if (r > 0) invoiceRows += `<tr><td>🏪 ค่าเช่าแผงค้า</td><td class="r">-</td><td class="r">-</td><td class="r">-</td><td class="r">-</td><td class="r"><strong>${formatMoney(r)}</strong></td></tr>`;
+  if (waterReading || wUnits > 0) {
+    const wp = waterReading ? waterReading.prev_reading : '-';
+    const wc = waterReading ? waterReading.curr_reading : '-';
+    const wd = waterReading ? fmtDate(waterReading.read_at) : '-';
+    invoiceRows += `<tr><td>💧 ค่าน้ำประปา</td><td class="r">${wp}</td><td class="r">${wc}</td><td class="r">${wUnits}</td><td class="r">${wd}</td><td class="r"><strong>${formatMoney(w)}</strong></td></tr>`;
+  }
+  if (electricReading || eUnits > 0) {
+    const ep = electricReading ? electricReading.prev_reading : '-';
+    const ec = electricReading ? electricReading.curr_reading : '-';
+    const ed = electricReading ? fmtDate(electricReading.read_at) : '-';
+    invoiceRows += `<tr><td>⚡ ค่าไฟฟ้า</td><td class="r">${ep}</td><td class="r">${ec}</td><td class="r">${eUnits}</td><td class="r">${ed}</td><td class="r"><strong>${formatMoney(e)}</strong></td></tr>`;
+  }
+  if (c > 0) invoiceRows += `<tr><td>🧹 ค่าส่วนกลาง</td><td class="r">-</td><td class="r">-</td><td class="r">-</td><td class="r">-</td><td class="r"><strong>${formatMoney(c)}</strong></td></tr>`;
+
+  // -- QR Code section --
+  let qrSectionHTML = '';
+  if (promptPayId && amount > 0 && slipStatus !== 'success' && slipStatus !== 'reviewing') {
+    qrSectionHTML = `
+      <div class="so-qr-section">
+        <div class="so-qr-title">📱 สแกน QR Code เพื่อชำระเงิน</div>
+        <div id="so-qr-container" style="display:flex;justify-content:center;padding:1rem"></div>
+        <div class="so-qr-info">PromptPay: <strong>${escapeHtml(promptPayId.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3'))}</strong></div>
+        <div class="so-qr-info">จำนวน: <strong>${formatMoney(amount)} บาท</strong></div>
+        <div class="so-qr-note">💡 หลังชำระแล้ว กรุณากด "ส่งสลิปชำระเงิน" พร้อมแนบสลิป</div>
+      </div>`;
+  }
+
+  // -- Payment stats --
   const paidCount = bills.filter(b => b.status === 'paid').length;
   const totalBills = bills.length;
   const paidTotal = bills.filter(b => b.status === 'paid').reduce((s, b) => s + (b.total_amount || 0), 0);
 
   el.innerHTML = `
-    <div class="hero-payment">
-      <div class="hero-greeting">สวัสดี${firstName ? ', ' + escapeHtml(firstName) : ''}</div>
-      <div class="hero-stall">
-        <span>🏪 ${escapeHtml(stallName)}</span>
-        ${stallSwitcherHTML}
-      </div>
-      <hr class="hero-divider">
-      <div class="hero-row">
-        <div class="hero-col">
-          <div class="hero-label">💳 ยอดชำระเดือนนี้</div>
-          <div class="hero-amount${amount === 0 ? ' zero' : ''}">${amount > 0 ? formatMoney(amount) + ' บาท' : 'ยังไม่มียอดแจ้ง'}</div>
-          ${breakdownHTML}
-          <div class="hero-period">${periodLabel ? '📅 ' + escapeHtml(periodLabel) : ''}</div>
+    <div class="so-invoice-card">
+      <div class="so-header">
+        <div class="so-header-top">
+          <div>
+            <div class="so-greeting">สวัสดี${firstName ? ', ' + escapeHtml(firstName) : ''} 👋</div>
+            <div class="so-stall-name">🏪 ${escapeHtml(stallName)} ${stallSwitcherHTML}</div>
+          </div>
+          <div style="text-align:right">${badgeHTML}</div>
         </div>
-        <div class="hero-col" style="text-align:right">${badgeHTML}</div>
+        ${periodLabel ? `<div class="so-period">📅 รอบบิล: <strong>${escapeHtml(periodLabel)}</strong></div>` : ''}
       </div>
-      ${dueDateHTML}
-      ${ctaHTML}
+
       ${rejectHTML}
-      ${cancelHTML}
+
+      ${activeBill && amount > 0 ? `
+      <div class="so-invoice-body">
+        <div class="so-invoice-title">📋 รายละเอียดค่าใช้จ่าย</div>
+        <div class="so-table-wrap">
+          <table class="so-invoice-table">
+            <thead>
+              <tr>
+                <th>รายการ</th>
+                <th class="r">เลขก่อน</th>
+                <th class="r">เลขหลัง</th>
+                <th class="r">หน่วย</th>
+                <th class="r">วันที่จด</th>
+                <th class="r">จำนวนเงิน</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${invoiceRows}
+            </tbody>
+            <tfoot>
+              <tr class="so-total-row">
+                <td colspan="5"><strong>💰 รวมทั้งสิ้น</strong></td>
+                <td class="r"><strong>${formatMoney(amount)} บาท</strong></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        ${dueDateHTML}
+      </div>
+
+      ${qrSectionHTML}
+      ` : `
+      <div class="so-no-bill">
+        <div style="font-size:3rem;margin-bottom:.5rem">🎉</div>
+        <div style="font-size:1.1rem;font-weight:600;color:var(--text)">ไม่มียอดค้างชำระ</div>
+        <div style="color:var(--text-light);margin-top:.25rem">ยังไม่มีบิลที่ต้องชำระในขณะนี้</div>
+      </div>
+      `}
+
+      <div class="so-cta-area">
+        ${ctaHTML}
+        ${cancelHTML}
+      </div>
     </div>
 
     ${outstanding > 0 && slipStatus !== 'success' ? `
@@ -354,6 +423,11 @@ async function pgDashboardStallOwner(el, user) {
         {key:'paid_at',label:'วันชำระ',date:true},{key:'status',label:'สถานะ',badge:STATUS_PAYMENT}
       ], payments)}
     </div>`;
+
+  // Render QR code after DOM is ready
+  if (promptPayId && amount > 0 && slipStatus !== 'success' && slipStatus !== 'reviewing') {
+    setTimeout(() => renderPromptPayQR('so-qr-container', promptPayId, amount, 220), 100);
+  }
 }
 
 window.simulateStallOwner = function() {
@@ -2321,15 +2395,17 @@ async function pgUploadSlip() {
   el.innerHTML = `<div class="loading">กำลังโหลด...</div>`;
 
   const stallId = user.stall_id;
-  const [billsRes, paymentsRes, contractRes] = await Promise.all([
+  const [billsRes, paymentsRes, contractRes, ppRes] = await Promise.all([
     callAPI('GET', '/billing/bills?stall_id=' + stallId + '&limit=20'),
     callAPI('GET', '/payments?stall_id=' + stallId + '&limit=20'),
-    callAPI('GET', '/contracts?stall_id=' + stallId + '&status=active')
+    callAPI('GET', '/contracts?stall_id=' + stallId + '&status=active'),
+    callAPI('GET', '/settings/promptpay_id')
   ]);
   const allBills = billsRes.data || [];
   const allPayments = paymentsRes.data || [];
   const contract = (contractRes.data || [])[0] || {};
   const stallName = user.stall_name || contract.stall_name || 'ร้านของฉัน';
+  const promptPayId = ppRes.data?.value || '';
 
   // Find unpaid bills (issued/overdue, no pending/verified payment)
   const paidBillIds = allPayments.filter(p => p.status !== 'rejected').map(p => p.bill_id);
@@ -2411,6 +2487,13 @@ async function pgUploadSlip() {
 
     <div class="form-section">
       <div class="form-section-title">💳 ข้อมูลสลิป</div>
+      ${promptPayId && defaultBill.total_amount > 0 ? `
+      <div class="so-qr-section" style="margin-bottom:1rem;border-radius:12px;border:1px solid #e2e8f0">
+        <div class="so-qr-title">📱 สแกน QR Code เพื่อชำระเงิน</div>
+        <div id="slip-qr-container" style="display:flex;justify-content:center;padding:1rem"></div>
+        <div class="so-qr-info">PromptPay: <strong>${escapeHtml(promptPayId.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3'))}</strong></div>
+        <div class="so-qr-info">จำนวน: <strong>${formatMoney(defaultBill.total_amount)} บาท</strong></div>
+      </div>` : ''}
       <input type="hidden" id="slip-bill-id" value="${defaultBill.id}">
       <div class="form-group">
         <label>จำนวนเงินที่ชำระ (บาท) *</label>
@@ -2450,6 +2533,7 @@ async function pgUploadSlip() {
 
   // Setup file input handler
   window._slipFiles = [];
+  window._slipPromptPayId = promptPayId;
   const fileInput = document.getElementById('slip-file-input');
   if (fileInput) {
     fileInput.addEventListener('change', function(e) {
@@ -2459,6 +2543,10 @@ async function pgUploadSlip() {
       e.target.value = '';
       renderSlipThumbs();
     });
+  }
+  // Render QR code on upload-slip page
+  if (promptPayId && defaultBill && defaultBill.total_amount > 0) {
+    setTimeout(() => renderPromptPayQR('slip-qr-container', promptPayId, defaultBill.total_amount, 200), 100);
   }
 }
 
@@ -2589,16 +2677,66 @@ async function pgMyBills() {
 async function pgMyPayments() {
   const el = document.getElementById('content');
   const user = getCurrentUser();
-  const res = await callAPI('GET', '/payments?stall_id=' + user.stall_id);
+  const [payRes, billsRes, contractRes] = await Promise.all([
+    callAPI('GET', '/payments?stall_id=' + user.stall_id),
+    callAPI('GET', '/billing/bills?stall_id=' + user.stall_id + '&limit=50'),
+    callAPI('GET', '/contracts?stall_id=' + user.stall_id + '&status=active')
+  ]);
+  const payments = payRes.data || [];
+  const bills = billsRes.data || [];
+  const contract = (contractRes.data || [])[0] || {};
+  const stallName = user.stall_name || contract.stall_name || 'ร้านของฉัน';
+  const billMap = {};
+  bills.forEach(b => { billMap[b.id] = b; });
+
+  // Build enriched rows
+  const rows = payments.map(p => {
+    const bill = billMap[p.bill_id] || {};
+    return {
+      ...p,
+      period_label: bill.period_label || '-',
+      water_amount: bill.water_amount || 0,
+      electric_amount: bill.electric_amount || 0,
+      rent_amount: bill.rent_amount || 0,
+      common_fee: bill.common_fee || 0,
+      total_amount: bill.total_amount || p.amount
+    };
+  });
+
   el.innerHTML = `
-    <div class="page-header"><h1>ประวัติชำระเงิน</h1></div>
-    <div class="card">
-      ${renderTable([
-        {key:'bill_id',label:'บิล'},{key:'amount',label:'ยอด',money:true},
-        {key:'method',label:'ช่องทาง',render:v=>({cash:'เงินสด',transfer:'โอน',promptpay:'PromptPay'}[v]||v)},
-        {key:'paid_at',label:'วันชำระ',date:true},{key:'status',label:'สถานะ',badge:STATUS_PAYMENT}
-      ], res.data || [])}
-    </div>`;
+    <div class="page-header"><h1>📋 ประวัติชำระเงิน</h1><p style="color:var(--text-light);margin:0">🏪 ${escapeHtml(stallName)}</p></div>
+    ${rows.length === 0 ? '<div class="card" style="text-align:center;padding:2rem;color:var(--text-light)">ยังไม่มีประวัติชำระเงิน</div>' : `
+    <div class="my-pay-list">
+      ${rows.map(p => {
+        const bill = billMap[p.bill_id] || {};
+        const statusMap = { pending: ['🔍 รอตรวจ','#F59E0B','#FFFBEB'], verified: ['✅ ตรวจแล้ว','#10B981','#F0FDF4'], approved: ['✅ อนุมัติ','#10B981','#F0FDF4'], rejected: ['❌ ไม่ผ่าน','#EF4444','#FEF2F2'] };
+        const [sLabel, sColor, sBg] = statusMap[p.status] || ['⏳','#6B7280','#F9FAFB'];
+        const methodLabel = { cash:'เงินสด', transfer:'โอนเงิน', promptpay:'PromptPay' }[p.method] || p.method;
+        const dateStr = p.paid_at ? new Date(p.paid_at).toLocaleDateString('th-TH', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : (p.created_at ? new Date(p.created_at).toLocaleDateString('th-TH', { year:'numeric', month:'short', day:'numeric' }) : '-');
+        return `
+        <div class="my-pay-card">
+          <div class="my-pay-top">
+            <div>
+              <div class="my-pay-period">📅 ${escapeHtml(p.period_label)}</div>
+              <div class="my-pay-date">${dateStr} · ${escapeHtml(methodLabel)}</div>
+            </div>
+            <span class="my-pay-status" style="background:${sBg};color:${sColor}">${sLabel}</span>
+          </div>
+          <div class="my-pay-detail">
+            ${p.rent_amount ? `<div class="my-pay-row"><span>🏪 ค่าเช่า</span><span>${formatMoney(p.rent_amount)}</span></div>` : ''}
+            ${p.water_amount ? `<div class="my-pay-row"><span>💧 ค่าน้ำ</span><span>${formatMoney(p.water_amount)}</span></div>` : ''}
+            ${p.electric_amount ? `<div class="my-pay-row"><span>⚡ ค่าไฟ</span><span>${formatMoney(p.electric_amount)}</span></div>` : ''}
+            ${p.common_fee ? `<div class="my-pay-row"><span>🧹 ส่วนกลาง</span><span>${formatMoney(p.common_fee)}</span></div>` : ''}
+          </div>
+          <div class="my-pay-total">
+            <span>💰 ยอดชำระ</span>
+            <span class="my-pay-amount">${formatMoney(p.amount)} บาท</span>
+          </div>
+          ${p.reference_no ? `<div class="my-pay-ref">อ้างอิง: ${escapeHtml(p.reference_no)}</div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>`}
+  `;
 }
 
 window.showMyPaymentForm = async function(billId, amount) {

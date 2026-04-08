@@ -1041,3 +1041,115 @@ td.right, th.right { text-align: right; }
 @media (max-width: 350px) {
   .quick-actions { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ═══════════════════════════════════
+   Stall Owner Invoice Card (.so-*)
+   ═══════════════════════════════════ */
+.so-invoice-card {
+  background: #fff; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,.08);
+  overflow: hidden; margin-bottom: 1.2rem;
+}
+.so-header {
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+  color: #fff; padding: 1.5rem 1.5rem 1rem;
+}
+.so-header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.so-greeting { font-size: 1rem; opacity: .85; margin-bottom: .25rem; }
+.so-stall-name { font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.so-period { margin-top: .75rem; font-size: .9rem; opacity: .8; }
+
+.so-badge { display: inline-block; padding: .3rem .8rem; border-radius: 20px; font-size: .85rem; font-weight: 600; white-space: nowrap; }
+.so-badge.paid { background: rgba(16,185,129,.2); color: #d1fae5; }
+.so-badge.pending { background: rgba(245,158,11,.2); color: #fef3c7; }
+.so-badge.rejected { background: rgba(239,68,68,.2); color: #fecaca; }
+.so-badge.waiting { background: rgba(255,255,255,.15); color: #fff; }
+
+.so-reject {
+  background: #FEF2F2; color: #991B1B; padding: .75rem 1.2rem; font-size: .9rem;
+  border-bottom: 1px solid #FECACA;
+}
+
+.so-invoice-body { padding: 1.2rem 1.5rem; }
+.so-invoice-title { font-size: 1.05rem; font-weight: 700; color: #1e293b; margin-bottom: .75rem; }
+.so-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.so-invoice-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.so-invoice-table th { background: #f1f5f9; color: #475569; font-weight: 600; padding: .6rem .5rem; text-align: left; white-space: nowrap; border-bottom: 2px solid #e2e8f0; }
+.so-invoice-table td { padding: .6rem .5rem; border-bottom: 1px solid #f1f5f9; color: #334155; }
+.so-invoice-table .r { text-align: right; }
+.so-total-row { background: #eff6ff; }
+.so-total-row td { padding: .75rem .5rem; font-size: 1rem; color: #1e40af; border-top: 2px solid #3b82f6; border-bottom: none; }
+
+.so-due {
+  margin-top: .75rem; padding: .6rem 1rem; border-radius: 8px;
+  background: #FFFBEB; color: #92400E; font-size: .9rem; font-weight: 500;
+}
+.so-due.soon { background: #FEF3C7; color: #92400E; }
+.so-due.urgent { background: #FEE2E2; color: #991B1B; animation: pulse-bg .8s infinite alternate; }
+@keyframes pulse-bg { from { opacity: 1; } to { opacity: .7; } }
+
+.so-no-bill {
+  text-align: center; padding: 2.5rem 1.5rem; color: var(--text-light);
+}
+
+.so-qr-section {
+  text-align: center; padding: 1.2rem 1.5rem; border-top: 1px solid #f1f5f9;
+  background: #fafbff;
+}
+.so-qr-title { font-size: 1rem; font-weight: 700; color: #1e40af; margin-bottom: .5rem; }
+.so-qr-info { font-size: .9rem; color: #475569; margin-top: .3rem; }
+.so-qr-note { font-size: .8rem; color: #94a3b8; margin-top: .75rem; }
+
+.so-cta-area { padding: 1rem 1.5rem; display: flex; flex-direction: column; gap: .5rem; }
+.so-cta {
+  display: block; width: 100%; padding: .9rem; border: none; border-radius: 12px;
+  font-size: 1.05rem; font-weight: 700; cursor: pointer; transition: all .2s;
+}
+.so-cta.pay { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; }
+.so-cta.pay:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,.4); }
+.so-cta.paid { background: #d1fae5; color: #065f46; cursor: default; }
+.so-cta.reviewing { background: #fef3c7; color: #92400e; cursor: default; }
+.so-cta.rejected { background: #fee2e2; color: #991b1b; }
+.so-cta.rejected:hover { background: #fecaca; }
+.so-cancel-btn {
+  background: none; border: 1px dashed #d1d5db; border-radius: 8px;
+  padding: .5rem; color: #6b7280; font-size: .85rem; cursor: pointer;
+}
+.so-cancel-btn:hover { background: #f3f4f6; }
+
+@media (max-width: 480px) {
+  .so-header { padding: 1.2rem 1rem .8rem; }
+  .so-invoice-body { padding: 1rem; }
+  .so-invoice-table { font-size: .8rem; }
+  .so-invoice-table th, .so-invoice-table td { padding: .5rem .3rem; }
+  .so-cta-area { padding: .75rem 1rem; }
+}
+
+/* ═══════════════════════════════════
+   My Payments Card List (.my-pay-*)
+   ═══════════════════════════════════ */
+.my-pay-list { display: flex; flex-direction: column; gap: .75rem; }
+.my-pay-card {
+  background: #fff; border-radius: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.06);
+  overflow: hidden; border: 1px solid #f1f5f9;
+}
+.my-pay-top {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: .75rem 1rem; border-bottom: 1px solid #f8fafc;
+}
+.my-pay-period { font-weight: 700; color: #1e293b; font-size: .95rem; }
+.my-pay-date { font-size: .8rem; color: #94a3b8; margin-top: .15rem; }
+.my-pay-status {
+  font-size: .8rem; font-weight: 600; padding: .2rem .6rem; border-radius: 12px; white-space: nowrap;
+}
+.my-pay-detail { padding: .5rem 1rem; }
+.my-pay-row {
+  display: flex; justify-content: space-between; font-size: .85rem; color: #475569;
+  padding: .2rem 0;
+}
+.my-pay-total {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: .6rem 1rem; background: #f8fafc; border-top: 1px solid #e2e8f0;
+  font-weight: 600; font-size: .95rem; color: #1e293b;
+}
+.my-pay-amount { color: #1e40af; font-size: 1.05rem; }
+.my-pay-ref { padding: .4rem 1rem .5rem; font-size: .8rem; color: #94a3b8; }
