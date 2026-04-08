@@ -3095,12 +3095,68 @@ async function pgMyInspections() {
   const el = document.getElementById('content');
   const user = getCurrentUser();
   const res = await callAPI('GET', '/inspections?stall_id=' + user.stall_id);
+  const inspections = res.data || [];
+
+  // Stats
+  const total = inspections.length;
+  const passCount = inspections.filter(i => i.result === 'pass').length;
+  const warnCount = inspections.filter(i => i.result === 'warning').length;
+  const failCount = inspections.filter(i => i.result === 'fail').length;
+  const avgScore = total ? (inspections.reduce((s, i) => s + (i.score || 0), 0) / total).toFixed(1) : '-';
+  const latestResult = inspections.length ? inspections[0].result : null;
+  const latestClass = latestResult === 'pass' ? 'pass' : latestResult === 'warning' ? 'warn' : latestResult === 'fail' ? 'fail' : '';
+  const latestLabel = latestResult === 'pass' ? '✅ ผ่าน' : latestResult === 'warning' ? '⚠️ ต้องปรับปรุง' : latestResult === 'fail' ? '❌ ไม่ผ่าน' : '-';
+
   el.innerHTML = `
-    <div class="page-header"><h1>ผลตรวจสุขอนามัย</h1></div>
+    <div class="page-header">
+      <div>
+        <h1>🔍 ผลตรวจสุขอนามัย</h1>
+        <p style="margin:0;font-size:.85rem;color:var(--text-light)">ประวัติผลการตรวจสุขอนามัยร้านค้าของคุณ</p>
+      </div>
+    </div>
+
+    <div class="insp-stats my-insp-stats">
+      <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#EEF2FF;color:#4F46E5">📊</div><div class="insp-stat-val">${total}</div><div class="insp-stat-lbl">ตรวจทั้งหมด</div></div>
+      <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#F0FDF4;color:#059669">✅</div><div class="insp-stat-val">${passCount}</div><div class="insp-stat-lbl">ผ่าน</div></div>
+      <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#FFFBEB;color:#D97706">⚠️</div><div class="insp-stat-val">${warnCount}</div><div class="insp-stat-lbl">เตือน</div></div>
+      <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#FEF2F2;color:#DC2626">❌</div><div class="insp-stat-val">${failCount}</div><div class="insp-stat-lbl">ไม่ผ่าน</div></div>
+      <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#F5F3FF;color:#7C3AED">🎯</div><div class="insp-stat-val">${avgScore}</div><div class="insp-stat-lbl">คะแนนเฉลี่ย</div></div>
+    </div>
+
+    ${latestResult ? `
+    <div class="my-insp-latest ${latestClass}">
+      <div class="my-insp-latest-label">ผลตรวจล่าสุด</div>
+      <div class="my-insp-latest-score">
+        <div class="insp-score-circle ${latestClass}" style="width:56px;height:56px;font-size:1.2rem">${inspections[0].score || 0}</div>
+        <div>
+          <div class="insp-result-badge ${latestClass}">${latestLabel}</div>
+          <div style="font-size:.8rem;color:var(--text-light);margin-top:.25rem">📅 ${inspections[0].inspection_date ? new Date(inspections[0].inspection_date).toLocaleDateString('th-TH', { year:'numeric', month:'short', day:'numeric' }) : '-'}</div>
+        </div>
+      </div>
+    </div>` : ''}
+
     <div class="card">
-      ${renderTable([
-        {key:'inspection_date',label:'วันตรวจ',date:true},{key:'score',label:'คะแนน',render:v=>`<strong>${v||0}</strong>/100`},
-        {key:'result',label:'ผลลัพธ์',badge:STATUS_INSPECTION},{key:'inspector_name',label:'ผู้ตรวจ'}
-      ], res.data || [], row => `<button class="btn btn-sm btn-secondary" onclick="showInspectionDetail('${row.id}')">ดูรายละเอียด</button>`)}
+      <div class="card-header"><h3>📋 ประวัติการตรวจทั้งหมด</h3></div>
+      ${inspections.length === 0 ? '<div style="padding:2rem;text-align:center;color:var(--text-light)">ยังไม่มีข้อมูลการตรวจ</div>' : `
+      <div class="insp-list">
+        ${inspections.map(insp => {
+          const scoreClass = insp.result === 'pass' ? 'pass' : insp.result === 'warning' ? 'warn' : 'fail';
+          const resultLabel = insp.result === 'pass' ? '✅ ผ่าน' : insp.result === 'warning' ? '⚠️ เตือน' : '❌ ไม่ผ่าน';
+          const dateStr = insp.inspection_date ? new Date(insp.inspection_date).toLocaleDateString('th-TH', { year:'numeric', month:'short', day:'numeric' }) : '-';
+          return `
+          <div class="insp-row" onclick="showInspectionDetail('${insp.id}')">
+            <div class="insp-row-left">
+              <div class="insp-score-circle ${scoreClass}">${insp.score || 0}</div>
+              <div>
+                <div class="insp-row-stall">คะแนน ${insp.score || 0}/100</div>
+                <div class="insp-row-meta">📅 ${dateStr} · 👤 ${escapeHtml(insp.inspector_name || '-')}</div>
+              </div>
+            </div>
+            <div class="insp-row-right">
+              <span class="insp-result-badge ${scoreClass}">${resultLabel}</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`}
     </div>`;
 }

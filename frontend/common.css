@@ -1255,3 +1255,18 @@ td.right, th.right { text-align: right; }
   .insp-row { flex-direction: column; align-items: flex-start; gap: .5rem; }
   .insp-row-right { align-self: flex-end; }
 }
+
+/* ── My Inspections (stall owner) ── */
+.my-insp-stats { grid-template-columns: repeat(5, 1fr); }
+.my-insp-latest {
+  background: #fff; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.2rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06); border-left: 4px solid #94a3b8;
+}
+.my-insp-latest.pass { border-left-color: #059669; background: linear-gradient(135deg, #f0fdf4 0%, #fff 50%); }
+.my-insp-latest.warn { border-left-color: #d97706; background: linear-gradient(135deg, #fffbeb 0%, #fff 50%); }
+.my-insp-latest.fail { border-left-color: #dc2626; background: linear-gradient(135deg, #fef2f2 0%, #fff 50%); }
+.my-insp-latest-label { font-size: .8rem; font-weight: 600; color: var(--text-light); text-transform: uppercase; letter-spacing: .5px; margin-bottom: .5rem; }
+.my-insp-latest-score { display: flex; align-items: center; gap: 1rem; }
+@media (max-width: 600px) {
+  .my-insp-stats { grid-template-columns: repeat(3, 1fr); }
+}
