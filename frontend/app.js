@@ -1102,66 +1102,212 @@ window.cancelReceipt = async function(id) {
 // ═══════════════════════════════════════════════
 // INSPECTIONS (ตรวจสุขอนามัย)
 // ═══════════════════════════════════════════════
+// ── Inspection Checklist (อ้างอิง กฎกระทรวงสุขลักษณะสถานที่จำหน่ายอาหาร พ.ศ.2561 + มาตรฐาน Clean Food Good Taste กรมอนามัย) ──
+const INSPECTION_CHECKLIST = [
+  { cat: '1. สุขลักษณะสถานที่', icon: '🏪', items: [
+    'พื้นที่ประกอบอาหารสะอาด ไม่มีเศษอาหาร คราบสกปรก',
+    'พื้นผิวสัมผัสอาหาร (เคาน์เตอร์, โต๊ะ) สะอาด อยู่ในสภาพดี',
+    'มีการแยกพื้นที่ปรุง-จำหน่าย เป็นสัดส่วน',
+    'มีแสงสว่างเพียงพอ อากาศถ่ายเทดี',
+    'ไม่มีสัตว์พาหะนำโรค (แมลงสาบ หนู แมลงวัน)',
+    'ถังขยะมีฝาปิดมิดชิด แยกขยะเปียก-แห้ง',
+  ]},
+  { cat: '2. สุขลักษณะอาหาร', icon: '🍜', items: [
+    'วัตถุดิบสด สะอาด ไม่หมดอายุ มีแหล่งที่มาชัดเจน',
+    'อาหารปรุงสำเร็จมีการปกปิดป้องกันฝุ่น/แมลง',
+    'อาหารเก็บรักษาอุณหภูมิเหมาะสม (ร้อน ≥60°C, เย็น ≤5°C)',
+    'ไม่ใช้สีผสมอาหาร/สารเคมีต้องห้ามในอาหาร',
+    'น้ำดื่ม น้ำแข็ง สะอาดปลอดภัย ได้มาตรฐาน',
+    'ไม่จำหน่ายอาหารที่มีราคาเกินกำหนด',
+  ]},
+  { cat: '3. สุขลักษณะภาชนะ/อุปกรณ์', icon: '🍽️', items: [
+    'ภาชนะใส่อาหาร สะอาด ไม่แตกร้าว ไม่เป็นสนิม',
+    'อุปกรณ์ประกอบอาหาร (มีด เขียง ทัพพี) สะอาด เก็บเป็นระเบียบ',
+    'มีที่ล้างภาชนะพร้อมน้ำยาล้าง แยกจากที่ล้างวัตถุดิบ',
+    'ผ้าเช็ดสะอาด แยกใช้งานชัดเจน',
+  ]},
+  { cat: '4. สุขลักษณะผู้สัมผัสอาหาร', icon: '👨‍🍳', items: [
+    'สวมเสื้อผ้าสะอาด ผ้ากันเปื้อน หมวกคลุมผม',
+    'ตัดเล็บสั้น สะอาด ไม่ทาเล็บ ไม่สวมเครื่องประดับ',
+    'ล้างมือด้วยสบู่ก่อนสัมผัสอาหารและหลังเข้าห้องน้ำ',
+    'ไม่ไอ จาม ลงบนอาหาร ไม่สูบบุหรี่ขณะปรุง/จำหน่าย',
+    'ไม่มีบาดแผลเปิดที่มือ/แขน (ถ้ามีต้องปิดด้วยพลาสเตอร์กันน้ำ+สวมถุงมือ)',
+    'มีใบรับรองแพทย์ / ผ่านการตรวจสุขภาพประจำปี',
+  ]},
+  { cat: '5. ระบบน้ำ/ของเสีย', icon: '🚰', items: [
+    'มีน้ำสะอาดเพียงพอสำหรับล้างวัตถุดิบ ภาชนะ และมือ',
+    'ระบบระบายน้ำไม่อุดตัน ไม่มีน้ำขัง ไม่ส่งกลิ่น',
+    'น้ำเสียไม่ไหลลงสู่แหล่งอาหาร',
+  ]},
+  { cat: '6. ป้ายและเอกสาร', icon: '📋', items: [
+    'แสดงป้ายราคาอาหารชัดเจน',
+    'แสดงป้ายชื่อร้าน / เลขที่แผง',
+    'มีเอกสารสัญญาเช่า / ใบอนุญาตพร้อมแสดง',
+  ]},
+];
+const INSPECTION_TOTAL_ITEMS = INSPECTION_CHECKLIST.reduce((s, c) => s + c.items.length, 0);
+
 async function pgInspections() {
   const el = document.getElementById('content');
   const res = await callAPI('GET', '/inspections');
   const user = getCurrentUser();
   const canInspect = ['admin','inspector'].includes(user.role);
+  const inspections = res.data || [];
+
+  // Stats
+  const total = inspections.length;
+  const passCount = inspections.filter(i => i.result === 'pass').length;
+  const warnCount = inspections.filter(i => i.result === 'warning').length;
+  const failCount = inspections.filter(i => i.result === 'fail').length;
+  const avgScore = total ? (inspections.reduce((s, i) => s + (i.score || 0), 0) / total).toFixed(1) : '-';
 
   el.innerHTML = `
-    <div class="page-header"><h1>ตรวจสุขอนามัย</h1>${canInspect ? '<button class="btn btn-primary" onclick="showInspectionForm()">+ ตรวจร้าน</button>' : ''}</div>
+    <div class="page-header">
+      <div>
+        <h1>🔍 ตรวจสุขอนามัยร้านอาหาร</h1>
+        <p style="margin:0;font-size:.85rem;color:var(--text-light)">อ้างอิง กฎกระทรวงสุขลักษณะสถานที่จำหน่ายอาหาร พ.ศ.2561 + มาตรฐาน Clean Food Good Taste กรมอนามัย</p>
+      </div>
+      ${canInspect ? '<button class="btn btn-primary" onclick="showInspectionForm()">📝 เริ่มตรวจร้าน</button>' : ''}
+    </div>
+
+    <div class="insp-stats">
+      <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#EEF2FF;color:#4F46E5">📊</div><div class="insp-stat-val">${total}</div><div class="insp-stat-lbl">ตรวจทั้งหมด</div></div>
+      <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#F0FDF4;color:#059669">✅</div><div class="insp-stat-val">${passCount}</div><div class="insp-stat-lbl">ผ่าน</div></div>
+      <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#FFFBEB;color:#D97706">⚠️</div><div class="insp-stat-val">${warnCount}</div><div class="insp-stat-lbl">เตือน</div></div>
+      <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#FEF2F2;color:#DC2626">❌</div><div class="insp-stat-val">${failCount}</div><div class="insp-stat-lbl">ไม่ผ่าน</div></div>
+      <div class="insp-stat-card"><div class="insp-stat-icon" style="background:#F5F3FF;color:#7C3AED">🎯</div><div class="insp-stat-val">${avgScore}</div><div class="insp-stat-lbl">คะแนนเฉลี่ย</div></div>
+    </div>
+
     <div class="card">
-      ${renderTable([
-        {key:'stall_name',label:'ร้าน'},{key:'inspection_date',label:'วันตรวจ',date:true},
-        {key:'score',label:'คะแนน',render:v=>`<strong>${v||0}</strong>/100`},
-        {key:'result',label:'ผลลัพธ์',badge:STATUS_INSPECTION},{key:'inspector_name',label:'ผู้ตรวจ'}
-      ], res.data || [], row => `<button class="btn btn-sm btn-secondary" onclick="showInspectionDetail('${row.id}')">ดูรายละเอียด</button>`)}
+      <div class="card-header"><h3>📋 ประวัติการตรวจ</h3></div>
+      ${inspections.length === 0 ? '<div style="padding:2rem;text-align:center;color:var(--text-light)">ยังไม่มีข้อมูลการตรวจ</div>' : `
+      <div class="insp-list">
+        ${inspections.map(insp => {
+          const scoreClass = insp.result === 'pass' ? 'pass' : insp.result === 'warning' ? 'warn' : 'fail';
+          const resultLabel = insp.result === 'pass' ? '✅ ผ่าน' : insp.result === 'warning' ? '⚠️ เตือน' : '❌ ไม่ผ่าน';
+          const dateStr = insp.inspection_date ? new Date(insp.inspection_date).toLocaleDateString('th-TH', { year:'numeric', month:'short', day:'numeric' }) : '-';
+          return `
+          <div class="insp-row" onclick="showInspectionDetail('${insp.id}')">
+            <div class="insp-row-left">
+              <div class="insp-score-circle ${scoreClass}">${insp.score || 0}</div>
+              <div>
+                <div class="insp-row-stall">${escapeHtml(insp.stall_name || '-')}</div>
+                <div class="insp-row-meta">📅 ${dateStr} · 👤 ${escapeHtml(insp.inspector_name || '-')}</div>
+              </div>
+            </div>
+            <div class="insp-row-right">
+              <span class="insp-result-badge ${scoreClass}">${resultLabel}</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`}
     </div>`;
 }
 
 window.showInspectionForm = async function() {
-  const [stallsRes, settingsRes] = await Promise.all([
-    callAPI('GET', '/stalls?status=occupied'),
-    callAPI('GET', '/settings/inspection_checklist')
-  ]);
+  const stallsRes = await callAPI('GET', '/stalls?status=occupied');
   const stalls = stallsRes.data || [];
-  let checklist = [];
-  try { checklist = JSON.parse(settingsRes.data?.value || '[]'); } catch {}
+  const stallOpts = stalls.map(s => `<option value="${s.id}">${escapeHtml(s.name || s.zone + '-' + s.number)}</option>`).join('');
 
-  const stallOpts = stalls.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
-  const checklistHTML = checklist.map((cat, ci) => `
-    <div style="margin-bottom:1rem">
-      <h4>${escapeHtml(cat.category)}</h4>
-      ${(cat.items||[]).map((item, ii) => `
-        <label style="display:flex;align-items:center;gap:0.5rem;margin:0.25rem 0">
-          <input type="checkbox" name="check_${ci}_${ii}" data-cat="${ci}" data-item="${ii}"> ${escapeHtml(item)}
-        </label>
-      `).join('')}
+  const checklistHTML = INSPECTION_CHECKLIST.map((cat, ci) => `
+    <div class="insp-cat">
+      <div class="insp-cat-header" onclick="this.parentElement.classList.toggle('collapsed')">
+        <span>${cat.icon} ${cat.cat}</span>
+        <span class="insp-cat-count" id="cat-count-${ci}">0/${cat.items.length}</span>
+      </div>
+      <div class="insp-cat-body">
+        ${cat.items.map((item, ii) => `
+          <label class="insp-check-item" onclick="event.stopPropagation()">
+            <input type="checkbox" name="chk_${ci}_${ii}" data-cat="${ci}" data-item="${ii}" onchange="updateInspScore()">
+            <span class="insp-check-text">${escapeHtml(item)}</span>
+          </label>
+        `).join('')}
+      </div>
     </div>
   `).join('');
 
   showModal(`
-    <div class="modal-header"><h2>ตรวจสุขอนามัย</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
-    <form onsubmit="saveInspection(event)">
-      <div class="modal-body">
-        <div class="form-group"><label>ร้านค้า *</label><select name="stall_id" required><option value="">-- เลือก --</option>${stallOpts}</select></div>
-        <div class="form-group"><label>วันที่ตรวจ *</label><input type="date" name="inspection_date" value="${new Date().toISOString().split('T')[0]}" required></div>
-        <h3>รายการตรวจ</h3>
-        <div id="checklist-container">${checklistHTML}</div>
-        <div class="form-group"><label>หมายเหตุ</label><textarea name="notes"></textarea></div>
+    <div class="modal-header"><h2>📝 ตรวจสุขอนามัยร้านค้า</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <form id="insp-form" onsubmit="saveInspection(event)">
+      <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+        <div class="form-row">
+          <div class="form-group"><label>🏪 ร้านค้า *</label><select class="form-select" name="stall_id" required><option value="">-- เลือกร้าน --</option>${stallOpts}</select></div>
+          <div class="form-group"><label>📅 วันที่ตรวจ *</label><input type="date" class="form-input" name="inspection_date" value="${new Date().toISOString().split('T')[0]}" required></div>
+        </div>
+
+        <div class="insp-score-display">
+          <div class="insp-score-big" id="insp-live-score">0</div>
+          <div class="insp-score-label">คะแนน / 100</div>
+          <div class="insp-score-bar"><div class="insp-score-fill" id="insp-score-fill" style="width:0%"></div></div>
+          <div class="insp-score-result" id="insp-live-result">ยังไม่ได้ตรวจ</div>
+        </div>
+
+        <div class="insp-checklist-title">📋 รายการตรวจ (${INSPECTION_TOTAL_ITEMS} ข้อ) — กดเลือกข้อที่ <strong>ผ่าน</strong></div>
+        ${checklistHTML}
+
+        <div class="form-group" style="margin-top:1rem">
+          <label>📝 หมายเหตุ / ข้อสังเกต</label>
+          <textarea class="form-input" name="notes" rows="3" placeholder="ระบุรายละเอียดเพิ่มเติม เช่น เรื่องที่ต้องแก้ไข จุดเสี่ยงที่พบ"></textarea>
+        </div>
       </div>
-      <div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button><button type="submit" class="btn btn-primary">บันทึกผล</button></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+        <button type="submit" class="btn btn-primary" id="insp-submit-btn">💾 บันทึกผลตรวจ</button>
+      </div>
     </form>`, {large:true});
+};
+
+window.updateInspScore = function() {
+  const form = document.getElementById('insp-form');
+  if (!form) return;
+  const checks = form.querySelectorAll('[name^="chk_"]');
+  let passed = 0, total = checks.length;
+  // Per-category counts
+  const catCounts = {};
+  checks.forEach(cb => {
+    const ci = cb.dataset.cat;
+    if (!catCounts[ci]) catCounts[ci] = { pass: 0, total: 0 };
+    catCounts[ci].total++;
+    if (cb.checked) { passed++; catCounts[ci].pass++; }
+  });
+  const score = total ? Math.round((passed / total) * 100) : 0;
+  const scoreEl = document.getElementById('insp-live-score');
+  const fillEl = document.getElementById('insp-score-fill');
+  const resultEl = document.getElementById('insp-live-result');
+  if (scoreEl) scoreEl.textContent = score;
+  if (fillEl) {
+    fillEl.style.width = score + '%';
+    fillEl.className = 'insp-score-fill ' + (score >= 80 ? 'pass' : score >= 50 ? 'warn' : 'fail');
+  }
+  if (resultEl) {
+    if (passed === 0) resultEl.textContent = 'ยังไม่ได้ตรวจ';
+    else if (score >= 80) { resultEl.textContent = '✅ ผ่านเกณฑ์'; resultEl.className = 'insp-score-result pass'; }
+    else if (score >= 50) { resultEl.textContent = '⚠️ ต้องปรับปรุง'; resultEl.className = 'insp-score-result warn'; }
+    else { resultEl.textContent = '❌ ไม่ผ่านเกณฑ์'; resultEl.className = 'insp-score-result fail'; }
+  }
+  // Update per-category counts
+  for (const ci in catCounts) {
+    const el = document.getElementById('cat-count-' + ci);
+    if (el) {
+      el.textContent = catCounts[ci].pass + '/' + catCounts[ci].total;
+      el.className = 'insp-cat-count ' + (catCounts[ci].pass === catCounts[ci].total ? 'all-pass' : '');
+    }
+  }
 };
 
 window.saveInspection = async function(e) {
   e.preventDefault();
   const fd = getFormData(e.target);
-  // Build checklist JSON from checkboxes
-  const checks = e.target.querySelectorAll('[name^="check_"]');
+  const checks = e.target.querySelectorAll('[name^="chk_"]');
   const results = [];
   checks.forEach(cb => {
-    results.push({ cat: cb.dataset.cat, item: cb.dataset.item, passed: cb.checked });
+    const ci = parseInt(cb.dataset.cat);
+    const ii = parseInt(cb.dataset.item);
+    results.push({
+      category: INSPECTION_CHECKLIST[ci]?.cat || '',
+      item: INSPECTION_CHECKLIST[ci]?.items[ii] || '',
+      passed: cb.checked
+    });
   });
   const totalItems = results.length;
   const passedItems = results.filter(r => r.passed).length;
@@ -1175,9 +1321,14 @@ window.saveInspection = async function(e) {
     notes: fd.notes,
     result: score >= 80 ? 'pass' : score >= 50 ? 'warning' : 'fail'
   };
+
+  const btn = document.getElementById('insp-submit-btn');
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+
   const res = await callAPI('POST', '/inspections', data);
-  if (res.error) return toast(res.error, 'error');
-  toast(`บันทึกผลตรวจ: ${score} คะแนน (${data.result === 'pass' ? 'ผ่าน' : data.result === 'warning' ? 'เตือน' : 'ไม่ผ่าน'})`, data.result === 'pass' ? 'success' : 'warning');
+  if (res.error) { toast(res.error, 'error'); btn.disabled = false; btn.textContent = '💾 บันทึกผลตรวจ'; return; }
+  const resultText = data.result === 'pass' ? 'ผ่าน ✅' : data.result === 'warning' ? 'ต้องปรับปรุง ⚠️' : 'ไม่ผ่าน ❌';
+  toast(`บันทึกผลตรวจสำเร็จ: ${score}/100 — ${resultText}`, data.result === 'pass' ? 'success' : 'warning');
   closeModal(); pgInspections();
 };
 
@@ -1186,17 +1337,59 @@ window.showInspectionDetail = async function(id) {
   const insp = res.data || {};
   let checklist = [];
   try { checklist = JSON.parse(insp.checklist_json || '[]'); } catch {}
+  const dateStr = insp.inspection_date ? new Date(insp.inspection_date).toLocaleDateString('th-TH', { year:'numeric', month:'long', day:'numeric' }) : '-';
+  const scoreClass = insp.result === 'pass' ? 'pass' : insp.result === 'warning' ? 'warn' : 'fail';
+  const resultLabel = insp.result === 'pass' ? '✅ ผ่านเกณฑ์' : insp.result === 'warning' ? '⚠️ ต้องปรับปรุง' : '❌ ไม่ผ่านเกณฑ์';
+
+  // Group checklist by category
+  const catMap = {};
+  checklist.forEach(c => {
+    const cat = c.category || 'อื่นๆ';
+    if (!catMap[cat]) catMap[cat] = [];
+    catMap[cat].push(c);
+  });
+
+  const failedItems = checklist.filter(c => !c.passed);
+
+  const catHTML = Object.entries(catMap).map(([cat, items]) => {
+    const catPass = items.filter(i => i.passed).length;
+    return `
+      <div class="insp-detail-cat">
+        <div class="insp-detail-cat-head">
+          <span>${escapeHtml(cat)}</span>
+          <span class="insp-cat-count ${catPass === items.length ? 'all-pass' : ''}">${catPass}/${items.length}</span>
+        </div>
+        ${items.map(c => `
+          <div class="insp-detail-item ${c.passed ? 'pass' : 'fail'}">
+            <span>${c.passed ? '✅' : '❌'}</span>
+            <span>${escapeHtml(c.item || '')}</span>
+          </div>
+        `).join('')}
+      </div>`;
+  }).join('');
+
   showModal(`
-    <div class="modal-header"><h2>ผลตรวจ ${formatDate(insp.inspection_date)}</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
-    <div class="modal-body">
-      <p><strong>ร้าน:</strong> ${escapeHtml(insp.stall_name||'')}</p>
-      <p><strong>คะแนน:</strong> ${insp.score}/100 — ${renderBadge(insp.result, STATUS_INSPECTION)}</p>
-      <p><strong>ผู้ตรวจ:</strong> ${escapeHtml(insp.inspector_name||'')}</p>
-      ${checklist.length ? `<h4>รายการตรวจ:</h4><ul>${checklist.map(c => `<li>${c.passed ? '✅' : '❌'} รายการ ${c.item}</li>`).join('')}</ul>` : ''}
-      ${insp.notes ? `<p><strong>หมายเหตุ:</strong> ${escapeHtml(insp.notes)}</p>` : ''}
+    <div class="modal-header"><h2>ผลตรวจสุขอนามัย</h2><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+      <div class="insp-detail-header">
+        <div class="insp-score-circle ${scoreClass}" style="width:64px;height:64px;font-size:1.3rem">${insp.score || 0}</div>
+        <div>
+          <div style="font-size:1.1rem;font-weight:700">${escapeHtml(insp.stall_name || '-')}</div>
+          <div style="font-size:.9rem;color:var(--text-light)">📅 ${dateStr} · 👤 ${escapeHtml(insp.inspector_name || '-')}</div>
+          <div class="insp-result-badge ${scoreClass}" style="margin-top:.3rem">${resultLabel}</div>
+        </div>
+      </div>
+      ${failedItems.length > 0 ? `
+      <div class="insp-fail-summary">
+        <div style="font-weight:700;margin-bottom:.5rem">❌ ข้อที่ไม่ผ่าน (${failedItems.length} ข้อ)</div>
+        ${failedItems.map(c => `<div class="insp-fail-item">• ${escapeHtml(c.item || '')}</div>`).join('')}
+      </div>` : ''}
+      ${insp.notes ? `<div style="background:#f8fafc;padding:.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:.9rem"><strong>📝 หมายเหตุ:</strong> ${escapeHtml(insp.notes)}</div>` : ''}
+      <div style="font-weight:700;margin-bottom:.5rem">📋 รายการตรวจทั้งหมด</div>
+      ${catHTML}
     </div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal()">ปิด</button></div>
-  `);
+  `, {large:true});
 };
 
 // ═══════════════════════════════════════════════
