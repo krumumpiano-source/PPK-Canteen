@@ -1789,15 +1789,32 @@ window.loadNotifyBills = async function() {
   const period = ensureRes.data;
   window._nbPeriod = period.id;
 
-  const billsRes = await callAPI('GET', '/billing/bills?period_id=' + period.id);
-  const bills = billsRes.data || [];
+  let billsRes = await callAPI('GET', '/billing/bills?period_id=' + period.id);
+  let bills = billsRes.data || [];
   const periodLabel = `${THAI_MONTHS[(period.month||1)-1]} ${period.year}`;
+
+  // Auto-generate bills if readings exist but no bills yet
+  if (!bills.length) {
+    const [waterRes, electricRes] = await Promise.all([
+      callAPI('GET', '/billing/readings?period_id=' + period.id + '&type=water'),
+      callAPI('GET', '/billing/readings?period_id=' + period.id + '&type=electric')
+    ]);
+    const hasReadings = (waterRes.data?.length || 0) + (electricRes.data?.length || 0) > 0;
+    if (hasReadings) {
+      container.innerHTML = '<div class="loading">⏳ กำลังสร้างบิลจากข้อมูลมิเตอร์...</div>';
+      const genRes = await callAPI('POST', '/billing/generate', { period_id: period.id });
+      if (!genRes.error && genRes.data?.count > 0) {
+        billsRes = await callAPI('GET', '/billing/bills?period_id=' + period.id);
+        bills = billsRes.data || [];
+      }
+    }
+  }
 
   if (!bills.length) {
     container.innerHTML = `
       <div style="text-align:center;padding:2rem;color:var(--text-secondary)">
         <p>ยังไม่มีบิลสำหรับรอบ ${periodLabel}</p>
-        <p style="font-size:.9rem">กดปุ่ม <strong>⚙️ สร้างบิล</strong> เพื่อสร้างบิลจากข้อมูลสัญญาและมิเตอร์</p>
+        <p style="font-size:.9rem">กรุณาบันทึกค่าน้ำ/ค่าไฟก่อน แล้วกดปุ่ม <strong>⚙️ สร้างบิล</strong></p>
       </div>`;
     return;
   }
