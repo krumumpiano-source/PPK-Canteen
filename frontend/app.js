@@ -304,15 +304,23 @@ async function pgDashboardStallOwner(el, user) {
 
   // -- QR Code section --
   let qrSectionHTML = '';
-  if (promptPayId && amount > 0 && slipStatus !== 'success' && slipStatus !== 'reviewing') {
-    qrSectionHTML = `
-      <div class="so-qr-section">
-        <div class="so-qr-title">📱 สแกน QR Code เพื่อชำระเงิน</div>
-        <div id="so-qr-container" style="display:flex;justify-content:center;padding:1rem"></div>
-        <div class="so-qr-info">PromptPay: <strong>${escapeHtml(promptPayId.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3'))}</strong></div>
-        <div class="so-qr-info">จำนวน: <strong>${formatMoney(amount)} บาท</strong></div>
-        <div class="so-qr-note">💡 หลังชำระแล้ว กรุณากด "ส่งสลิปชำระเงิน" พร้อมแนบสลิป</div>
-      </div>`;
+  if (amount > 0 && slipStatus !== 'success' && slipStatus !== 'reviewing') {
+    if (promptPayId) {
+      qrSectionHTML = `
+        <div class="so-qr-section">
+          <div class="so-qr-title">📱 สแกน QR Code เพื่อชำระเงิน</div>
+          <div id="so-qr-container" style="display:flex;justify-content:center;padding:1rem"></div>
+          <div class="so-qr-info">PromptPay: <strong>${escapeHtml(promptPayId.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3'))}</strong></div>
+          <div class="so-qr-info">จำนวน: <strong>${formatMoney(amount)} บาท</strong></div>
+          <div class="so-qr-note">💡 หลังชำระแล้ว กรุณากด "ส่งสลิปชำระเงิน" พร้อมแนบสลิป</div>
+        </div>`;
+    } else {
+      qrSectionHTML = `
+        <div class="so-qr-section">
+          <div class="so-qr-title" style="color:#94a3b8">📱 QR Code PromptPay</div>
+          <div style="padding:1rem;color:#94a3b8;font-size:.9rem">⚠️ ยังไม่ได้ตั้งค่า PromptPay ID — กรุณาแจ้งผู้ดูแลระบบ</div>
+        </div>`;
+    }
   }
 
   // -- Payment stats --
