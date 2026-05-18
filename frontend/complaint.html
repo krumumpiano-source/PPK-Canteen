@@ -139,8 +139,8 @@ async function trackComplaint() {
     }
 
     const c = json.data;
-    const statusMap = { pending: 'รอดำเนินการ', in_progress: 'กำลังดำเนินการ', resolved: 'แก้ไขแล้ว', dismissed: 'ยกเลิก' };
-    const statusColor = { pending: '#f59e0b', in_progress: '#3b82f6', resolved: '#10b981', dismissed: '#ef4444' };
+    const statusMap = { open: 'รับเรื่องแล้ว', investigating: 'กำลังดำเนินการ', resolved: 'แก้ไขแล้ว', dismissed: 'ยกเลิก', pending: 'รอดำเนินการ', in_progress: 'กำลังดำเนินการ' };
+    const statusColor = { open: '#f59e0b', investigating: '#3b82f6', resolved: '#10b981', dismissed: '#ef4444', pending: '#f59e0b', in_progress: '#3b82f6' };
 
     msgEl.innerHTML = '';
     resultEl.classList.remove('hidden');

@@ -21,16 +21,16 @@ export async function onRequest(context) {
 
 async function publicSubmit(DB, request) {
   const body = await request.json();
-  if (!body.description) return Response.json({ error: 'กรุณากรอกรายละเอียด' }, { status: 400 });
+  if (!body.title || !body.description) return Response.json({ error: 'กรุณากรอกหัวข้อและรายละเอียด' }, { status: 400 });
 
   const id = 'CMP-' + Date.now().toString(36).toUpperCase();
   const trackingCode = Math.random().toString(36).slice(2, 8).toUpperCase();
 
   await DB.prepare(
-    `INSERT INTO complaints (id, stall_id, complainant_type, complainant_name, category, description, tracking_code, status)
-     VALUES (?,?,?,?,?,?,?,?)`
+    `INSERT INTO complaints (id, stall_id, complainant_type, complainant_name, category, title, description, tracking_code, status)
+     VALUES (?,?,?,?,?,?,?,?,?)`
   ).bind(id, body.stall_id || null, body.complainant_type || 'anonymous', body.complainant_name || null,
-    body.category || 'other', body.description, trackingCode, 'open').run();
+    body.category || 'other', body.title, body.description, trackingCode, 'open').run();
 
   return Response.json({ data: { id, tracking_code: trackingCode } }, { status: 201 });
 }
@@ -41,7 +41,7 @@ async function publicTrack(DB, request) {
   if (!code) return Response.json({ error: 'กรุณาระบุรหัสติดตาม' }, { status: 400 });
 
   const row = await DB.prepare(
-    'SELECT tracking_code, category, description, status, response, responded_at, created_at FROM complaints WHERE tracking_code = ?'
+    'SELECT tracking_code, category, title, description, status, response, responded_at, created_at FROM complaints WHERE tracking_code = ?'
   ).bind(code.toUpperCase()).first();
   if (!row) return Response.json({ error: 'ไม่พบข้อร้องเรียน' }, { status: 404 });
   return Response.json({ data: row });

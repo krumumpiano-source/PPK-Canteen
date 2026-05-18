@@ -2342,42 +2342,6 @@ async function pgNotifyBills() {
   const todayISO = now.toISOString().split('T')[0];
 
   el.innerHTML = `
-    <style>
-      .nb-section{background:#ecfdf5;border-radius:14px;padding:1.5rem;margin-bottom:1rem;box-shadow:0 2px 12px rgba(0,0,0,0.03);width:100%;border:1px solid #a7f3d0}
-      .nb-section-title{font-size:1.1rem;font-weight:700;color:#059669;margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;border-bottom:2px solid #a7f3d0;padding-bottom:.5rem}
-      .nb-info{background:#d1fae5;border:1px solid #a7f3d0;border-radius:8px;padding:.8rem 1rem;margin-bottom:1rem;color:#065f46;font-size:.9rem;display:flex;align-items:center;gap:.5rem}
-      .nb-capture{width:100%;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.06)}
-      .nb-capture-header{background:linear-gradient(135deg,#10b981,#059669);color:#fff;text-align:center;padding:.9rem 1rem;font-size:1.2rem;font-weight:700;letter-spacing:.5px}
-      .nb-tbl{width:100%;border-collapse:collapse;background:#fff;font-size:.92rem}
-      .nb-tbl th{background:linear-gradient(135deg,#d1fae5,#a7f3d0);color:#065f46;padding:.65rem .5rem;font-weight:700;text-align:center;border:1px solid #86efac;white-space:nowrap}
-      .nb-tbl td{padding:.55rem .5rem;border:1px solid #d1fae5;text-align:center;vertical-align:middle}
-      .nb-tbl tr:nth-child(even){background:#f0fdf4}
-      .nb-tbl tr:hover{background:#dcfce7}
-      .nb-tbl .col-name{min-width:140px;text-align:left;padding-left:.8rem}
-      .nb-money{font-weight:700;color:#059669}
-      .nb-total{font-weight:700;color:#b45309;font-size:1.05rem}
-      .nb-footer{background:#fffbeb;color:#92400e;text-align:center;padding:.6rem;font-size:.85rem;border-top:1px solid #fde68a}
-      .nb-common-cell{display:inline-flex;align-items:center;gap:5px}
-      .nb-common-val{font-weight:700;color:#059669;min-width:45px;text-align:right;display:inline-block}
-      .nb-common-val.editable{cursor:pointer;border-bottom:1px dashed #94a3b8}
-      .nb-common-val.editable:hover{color:#2563eb;border-color:#2563eb}
-      .nb-exempt-btn{padding:2px 7px;border-radius:6px;border:1.5px solid #fca5a5;background:#fff1f2;color:#ef4444;font-size:.75rem;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap;line-height:1.6}
-      .nb-exempt-btn:hover{background:#fecaca;border-color:#f87171}
-      .nb-exempt-btn.exempted{background:#dcfce7;color:#16a34a;border-color:#86efac}
-      .nb-exempt-btn.exempted:hover{background:#bbf7d0}
-      .nb-exempted-row .nb-common-val{color:#9ca3af;text-decoration:line-through}
-      .nb-edit-input{width:58px;padding:1px 4px;border:1.5px solid #3b82f6;border-radius:5px;font-size:.9rem;font-family:inherit;text-align:center;font-weight:700;color:#1e40af;outline:none}
-      .nb-edit-input:focus{box-shadow:0 0 0 2px rgba(59,130,246,.3)}
-      .nb-btn{border-radius:10px;font-size:1rem;font-weight:700;padding:.7rem 1.8rem;border:none;cursor:pointer;box-shadow:0 4px 6px rgba(0,0,0,.06);transition:transform .2s,box-shadow .2s;font-family:inherit;display:inline-flex;align-items:center;gap:.5rem}
-      .nb-btn:hover{transform:translateY(-2px);box-shadow:0 6px 8px rgba(0,0,0,.15)}
-      .nb-btn:active{transform:translateY(0)}
-      .nb-btn-green{background:linear-gradient(135deg,#10b981,#059669);color:#fff}
-      .nb-btn-orange{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff}
-      .nb-btn-blue{background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff}
-      .nb-btn-gray{background:linear-gradient(to right,#e5e7eb,#d1d5db);color:#374151}
-      .nb-btn-red{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff}
-      @media(max-width:600px){.nb-tbl{font-size:.8rem}.nb-tbl th,.nb-tbl td{padding:.4rem .3rem}.nb-btn{width:100%;justify-content:center}}
-    </style>
     <div class="page-header"><h1>📋 แจ้งยอดชำระ</h1></div>
     <div class="nb-info">ℹ️ ข้อมูลค่าน้ำ ค่าไฟ ค่าส่วนกลาง จะถูกดึงจากระบบโดยอัตโนมัติ ระบบจะคำนวณยอดรวมให้ กดปุ่มบันทึกภาพเพื่อส่งแจ้งยอด</div>
     <div class="nb-section">
