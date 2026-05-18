@@ -486,16 +486,68 @@ window.cancelSlipFromDashboard = async function(paymentId) {
 };
 
 async function pgDashboardExec(el, user) {
-  const stats = await callAPI('GET', '/reports/dashboard-stats');
-  const s = stats.data || {};
+  const [statsRes, revenueRes] = await Promise.all([
+    callAPI('GET', '/reports/dashboard-stats'),
+    callAPI('GET', '/reports/revenue')
+  ]);
+  const s = statsRes.data || {};
+  const revenues = revenueRes.data || [];
+
+  // Build simple CSS bar chart
+  const maxRev = revenues.reduce((m, r) => Math.max(m, r.total || 0), 0) || 1;
+  const barChart = revenues.length === 0
+    ? '<p style="padding:2rem;text-align:center;color:var(--text-light)">ยังไม่มีข้อมูลรายได้</p>'
+    : `<div style="display:flex;align-items:flex-end;gap:8px;height:200px;padding:1rem 0;overflow-x:auto">
+        ${revenues.slice(0, 12).reverse().map(r => {
+          const pct = Math.max(4, Math.round((r.total / maxRev) * 180));
+          const [yr, mo] = (r.month || '').split('-');
+          const moNum = parseInt(mo, 10);
+          const moLabel = THAI_MONTHS ? (THAI_MONTHS[moNum - 1] || mo) : mo;
+          return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:48px;flex:1">
+            <div style="font-size:.7rem;font-weight:600;color:#374151">${formatMoney(r.total)}</div>
+            <div style="width:100%;background:linear-gradient(180deg,#3B82F6,#60A5FA);border-radius:4px 4px 0 0;height:${pct}px"></div>
+            <div style="font-size:.65rem;color:#6B7280;text-align:center">${moLabel}<br>${yr ? parseInt(yr)+543 : ''}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+
   el.innerHTML = `
     <div class="admin-stats">
       <div class="admin-stat"><div class="admin-stat-icon">🏪</div><div class="admin-stat-value ok">${s.total_stalls || 0}</div><div class="admin-stat-label">ร้านค้าทั้งหมด</div></div>
       <div class="admin-stat"><div class="admin-stat-icon">📋</div><div class="admin-stat-value ok">${s.occupied_stalls || 0}</div><div class="admin-stat-label">มีผู้เช่า</div></div>
-      <div class="admin-stat"><div class="admin-stat-icon">💰</div><div class="admin-stat-value">${formatMoney(s.total_revenue || 0)}</div><div class="admin-stat-label">รายได้ปีงบฯ</div></div>
+      <div class="admin-stat"><div class="admin-stat-icon">💰</div><div class="admin-stat-value">${formatMoney(s.total_revenue || 0)}</div><div class="admin-stat-label">รายได้รวม</div></div>
+      <div class="admin-stat"><div class="admin-stat-icon">💳</div><div class="admin-stat-value">${formatMoney(s.monthly_revenue || 0)}</div><div class="admin-stat-label">รายได้เดือนนี้</div></div>
       <div class="admin-stat"><div class="admin-stat-icon">🔍</div><div class="admin-stat-value">${s.avg_inspection || '—'}</div><div class="admin-stat-label">คะแนนตรวจเฉลี่ย</div></div>
     </div>
-    <div class="card"><div class="card-header"><h3>รายงานรายเดือน</h3></div><div id="exec-chart-container" style="height:300px;display:flex;align-items:center;justify-content:center"><small>กำลังโหลดกราฟ...</small></div></div>`;
+    <div class="card">
+      <div class="card-header"><h3>📊 รายได้รายเดือน (12 เดือนล่าสุด)</h3></div>
+      <div style="padding:0 1rem 1rem">${barChart}</div>
+      <div class="table-wrap" style="margin:0 1rem 1rem">
+        <table>
+          <thead><tr><th>เดือน</th><th class="right">ยอดรับชำระ</th><th class="right">จำนวนรายการ</th></tr></thead>
+          <tbody>
+            ${revenues.length === 0
+              ? '<tr><td colspan="3" style="text-align:center;color:var(--text-light)">ยังไม่มีข้อมูล</td></tr>'
+              : revenues.map(r => {
+                const [yr, mo] = (r.month || '').split('-');
+                const moNum = parseInt(mo, 10);
+                const moLabel = THAI_MONTHS ? (THAI_MONTHS[moNum - 1] || mo) : mo;
+                return `<tr>
+                  <td>${moLabel} ${yr ? parseInt(yr)+543 : ''}</td>
+                  <td class="right">${formatMoney(r.total)}</td>
+                  <td class="right">${r.count || 0} รายการ</td>
+                </tr>`;
+              }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="hub-grid">
+      <div class="hub-section">📊 รายงานและข้อมูล</div>
+      <a class="hub-item" href="#/reports"><div class="hub-icon" style="background:#EEF2FF">📈</div><span class="hub-label">รายงาน</span></a>
+      <a class="hub-item" href="#/complaints-admin"><div class="hub-icon" style="background:#FFF7ED">📢</div><span class="hub-label">ข้อร้องเรียน</span></a>
+      <a class="hub-item" href="#/inspections"><div class="hub-icon" style="background:#F0FDF4">🔍</div><span class="hub-label">ผลตรวจ</span></a>
+    </div>`;
 }
 
 async function pgDashboardInspector(el, user) {
@@ -1755,7 +1807,49 @@ window.runReport = async function(type) {
   container.innerHTML = '<div class="loading">กำลังโหลดรายงาน...</div>';
   const res = await callAPI('GET', '/reports/' + type);
   if (res.error) { container.innerHTML = `<p class="alert alert-error">${res.error}</p>`; return; }
-  container.innerHTML = `<div class="card-header"><h3>ผลรายงาน</h3></div><pre style="padding:1rem;overflow:auto;font-size:.85rem">${escapeHtml(JSON.stringify(res.data, null, 2))}</pre>`;
+  const data = res.data || [];
+
+  let title = '', tableHTML = '';
+  if (type === 'revenue') {
+    title = '💰 รายงานรายได้รายเดือน';
+    tableHTML = renderTable([
+      { key: 'month', label: 'เดือน', render: v => { const [yr, mo] = (v||'').split('-'); return (THAI_MONTHS?.[parseInt(mo,10)-1]||mo) + ' ' + (yr ? parseInt(yr)+543 : ''); } },
+      { key: 'total', label: 'ยอดรับชำระ', money: true },
+      { key: 'count', label: 'จำนวนรายการ', render: v => `${v||0} รายการ` },
+    ], data);
+  } else if (type === 'bills') {
+    title = '📋 รายงานสถานะบิล';
+    tableHTML = renderTable([
+      { key: 'status', label: 'สถานะ', badge: STATUS_BILL },
+      { key: 'count', label: 'จำนวนบิล', render: v => `${v||0} ใบ` },
+      { key: 'total', label: 'ยอดรวม', money: true },
+    ], data);
+  } else if (type === 'inspection') {
+    title = '🔍 รายงานผลตรวจสุขอนามัย (50 รายการล่าสุด)';
+    tableHTML = renderTable([
+      { key: 'stall_name', label: 'ร้านค้า' },
+      { key: 'inspection_date', label: 'วันตรวจ', date: true },
+      { key: 'score', label: 'คะแนน', render: v => v != null ? `${Math.round(v)}/100` : '-' },
+      { key: 'result', label: 'ผล', badge: { pass: { text: 'ผ่าน', class: 'badge-success' }, warning: { text: 'เตือน', class: 'badge-warning' }, fail: { text: 'ไม่ผ่าน', class: 'badge-danger' } } },
+    ], data);
+  } else if (type === 'stalls') {
+    title = '🏪 รายงานร้านค้าและสัญญา';
+    tableHTML = renderTable([
+      { key: 'name', label: 'ชื่อร้าน' },
+      { key: 'status', label: 'สถานะ', badge: { occupied: { text: 'มีผู้เช่า', class: 'badge-success' }, vacant: { text: 'ว่าง', class: 'badge-secondary' }, maintenance: { text: 'ปิดซ่อม', class: 'badge-warning' } } },
+      { key: 'tenant_name', label: 'ผู้เช่า', render: v => v || '-' },
+      { key: 'contract_end', label: 'สิ้นสุดสัญญา', date: true },
+      { key: 'last_inspection', label: 'ตรวจล่าสุด', date: true },
+      { key: 'last_score', label: 'คะแนนล่าสุด', render: v => v != null ? `${Math.round(v)}/100` : '-' },
+    ], data);
+  }
+
+  container.innerHTML = `
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+      <h3>${title}</h3>
+      <small style="color:var(--text-light)">${data.length} รายการ</small>
+    </div>
+    ${tableHTML || '<p style="padding:1rem;text-align:center;color:var(--text-light)">ไม่มีข้อมูล</p>'}`;
 };
 
 // ═══════════════════════════════════════════════
